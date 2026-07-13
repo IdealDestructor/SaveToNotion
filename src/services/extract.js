@@ -184,7 +184,7 @@ function parseMarkdownToBlocks(markdown) {
   return blocks;
 }
 
-async function postWithRetry(url, body, headers, attempts) {
+async function postWithRetry(url, body, headers, attempts, step) {
   attempts = attempts || 4;
   let lastErr;
   for (let i = 0; i < attempts; i++) {
@@ -198,13 +198,13 @@ async function postWithRetry(url, body, headers, attempts) {
         await new Promise(r => setTimeout(r, delay));
         continue;
       }
-      throw enhancedErr(err);
+      throw enhancedErr(err, step);
     }
   }
-  throw enhancedErr(lastErr);
+  throw enhancedErr(lastErr, step);
 }
 
-function enhancedErr(err) {
+function enhancedErr(err, step) {
   if (!err) return new Error('Unknown error');
   const status = err.response && err.response.status;
   const data = err.response && err.response.data;
@@ -213,51 +213,78 @@ function enhancedErr(err) {
     if (typeof data === 'string') msg += ` | ${data}`;
     else msg += ` | ${data.status || ''} ${data.code || ''} ${data.message || JSON.stringify(data)}`;
   }
+  const url = err.config && err.config.url;
+  if (step) msg = `${step}: ${msg}`;
+  if (url) msg += ` (${url})`;
   const e = new Error(msg);
   e.status = status;
+  e.code = data && data.code;
   return e;
+}
+
+function normalizeNotionId(id) {
+  if (!id) return null;
+  const raw = String(id).trim();
+  const match = raw.match(/([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})/i);
+  if (!match) return raw;
+  const hex = match[1].replace(/-/g, '');
+  if (hex.length !== 32) return raw;
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function titleProperty(text) {
+  return { title: richText(text || 'Untitled', 2000) };
 }
 
 async function saveToNotion(processedContent, title, settings, parentId, note) {
   if (!settings) settings = settingsService.getAll();
   const { notionApiKey } = settings;
   if (!notionApiKey) throw new Error('Notion API Key not configured');
-  
+
+  const normalizedParentId = normalizeNotionId(parentId);
+  if (!normalizedParentId) {
+    throw new Error(
+      '请选择一个父页面。内部集成无法直接保存到工作区根目录，请先在 Notion 中创建页面并授权给集成，然后在上方选择目标页面。'
+    );
+  }
+
   const headers = {
     Authorization: `Bearer ${notionApiKey}`,
     'Content-Type': 'application/json',
     'Notion-Version': settings.notionVersion || '2022-06-28',
   };
-  
+
   const notionContent = processedContent + (note ? `\n\n> 💡 备注: ${note}` : '');
   const blocks = parseMarkdownToBlocks(notionContent);
-  
-  // Resolve the parent's title property name (defaults to "title"; child pages may use "Name" etc.)
-  let titlePropName = 'title';
-  if (parentId) {
-    try {
-      const parentRes = await axios.get(`https://api.notion.com/v1/pages/${parentId}`, { headers });
-      const props = (parentRes.data && parentRes.data.properties) || {};
-      for (const key of Object.keys(props)) {
-        if (props[key] && props[key].type === 'title') { titlePropName = key; break; }
-      }
-    } catch (e) { /* fall back to "title" */ }
-  }
-  
-  // Create page
-  const createRes = await postWithRetry('https://api.notion.com/v1/pages', {
-    parent: parentId ? { page_id: parentId } : { workspace: true },
-    properties: { [titlePropName]: richText(title || 'Untitled', 1900).slice(0, 1) },
-  }, headers);
-  
-  const pageId = createRes.data.id;
-  
+
+  // Child pages under page_id always use the "title" property (Notion API requirement).
+  const createRes = await postWithRetry(
+    'https://api.notion.com/v1/pages',
+    {
+      parent: { page_id: normalizedParentId },
+      properties: { title: titleProperty(title) },
+    },
+    headers,
+    4,
+    '创建 Notion 页面'
+  );
+
+  const pageId = createRes.data && createRes.data.id;
+  if (!pageId) throw new Error('创建 Notion 页面失败: 响应中缺少 page id');
+
   // Append content blocks in batches of 100 (Notion limit)
   for (let i = 0; i < blocks.length; i += 100) {
     const batch = blocks.slice(i, i + 100);
-    await postWithRetry(`https://api.notion.com/v1/blocks/${pageId}/children`, { children: batch }, headers);
+    if (!batch.length) continue;
+    await postWithRetry(
+      `https://api.notion.com/v1/blocks/${pageId}/children`,
+      { children: batch },
+      headers,
+      4,
+      '写入 Notion 内容块'
+    );
   }
-  
+
   return { success: true, pageId };
 }
 

@@ -54,7 +54,7 @@
     <section class="tab-panel active" id="panel-extract">
       <div class="hero">
         <h1 class="hero-title">把一个网页<span class="grad">变成一篇 Notion 笔记</span></h1>
-        <p class="hero-desc">粘贴链接，AI 自动提炼正文、整理为结构化 Markdown，一键存入 Notion。</p>
+        <p class="hero-desc">粘贴链接，AI 自动提炼正文、整理为结构化 Markdown，可存入 Notion 或直接导出 .md 文件。</p>
       </div>
 
       <div class="card card-feature">
@@ -71,10 +71,10 @@
 
         <div class="form-row">
           <div class="form-group">
-            <label for="parent-search">保存目标 <span class="hint">留空则存到工作区根目录</span></label>
+            <label for="parent-search">保存目标 <span class="hint">必选，需先在 Notion 中授权页面给集成</span></label>
             <input type="text" id="parent-search" placeholder="搜索 Notion 页面..." oninput="onParentSearch()" onfocus="loadNotionPages()" />
             <select id="parent-select" style="margin-top:8px">
-              <option value="">Notion 工作区（根目录）</option>
+              <option value="">请选择目标页面...</option>
             </select>
           </div>
           <div class="form-group">
@@ -92,6 +92,10 @@
           <button class="btn btn-secondary" id="btn-preview" onclick="doPreview()">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             预览
+          </button>
+          <button class="btn btn-secondary" id="btn-export-md" onclick="doExportMarkdown()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            导出 Markdown
           </button>
           <button class="btn btn-primary" id="btn-extract" onclick="doExtract()">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>

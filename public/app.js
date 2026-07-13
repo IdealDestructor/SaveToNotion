@@ -162,7 +162,7 @@
 
   function renderParentTree(pages, selectedId) {
     var sel = document.getElementById('parent-select');
-    sel.innerHTML = '<option value="">Notion 工作区（根目录）</option>';
+    sel.innerHTML = '<option value="">请选择目标页面...</option>';
     if (!pages || !pages.length) return;
     var byId = {};
     pages.forEach(function (p) {
@@ -224,10 +224,31 @@
     return name.slice(0, 80) || 'savetonotion-export';
   }
 
+  function buildMarkdownContent(data, note) {
+    var md = (data && data.processedContent) || '';
+    if (note) md += '\n\n> 💡 备注: ' + note;
+    return md;
+  }
+
+  function triggerMarkdownDownload(data, note) {
+    var md = buildMarkdownContent(data, note);
+    var blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = sanitizeFilename(data && data.title) + '.md';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    return a.download;
+  }
+
   async function copyMarkdown() {
     if (!lastPreview) return;
     try {
-      await navigator.clipboard.writeText(lastPreview.processedContent || '');
+      var note = document.getElementById('extract-note').value.trim();
+      await navigator.clipboard.writeText(buildMarkdownContent(lastPreview, note));
       showStatus('extract-status', 'success', '✅ 已复制到剪贴板');
     } catch (e) {
       showStatus('extract-status', 'error', '❌ 复制失败：' + e.message);
@@ -236,16 +257,37 @@
 
   function downloadMarkdown() {
     if (!lastPreview) return;
-    var md = lastPreview.processedContent || '';
-    var blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = sanitizeFilename(lastPreview.title) + '.md';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    var note = document.getElementById('extract-note').value.trim();
+    var filename = triggerMarkdownDownload(lastPreview, note);
+    showStatus('extract-status', 'success', '✅ Markdown 文件已下载：' + filename);
+  }
+
+  async function doExportMarkdown() {
+    var url = document.getElementById('extract-url').value.trim();
+    if (!url) {
+      showStatus('extract-status', 'error', '请输入网页链接');
+      return;
+    }
+    var note = document.getElementById('extract-note').value.trim();
+    var promptOverride = document.getElementById('prompt-override').value.trim();
+    hideStatus('extract-status');
+    setLoading(true, '正在提取并整理 Markdown...', 30);
+    try {
+      var data = lastPreview && lastPreview.url === url ? lastPreview : await api('/extract/preview', {
+        method: 'POST',
+        body: JSON.stringify({ url: url, promptOverride: promptOverride, settings: getSettingsFromForm() }),
+      });
+      lastPreview = data;
+      document.getElementById('preview-card').style.display = 'block';
+      document.getElementById('preview-title-tag').textContent = data.title || url;
+      document.getElementById('preview-content').textContent = buildMarkdownContent(data, note) || '(无内容)';
+      var filename = triggerMarkdownDownload(data, note);
+      showStatus('extract-status', 'success', '✅ Markdown 文件已下载：' + filename);
+    } catch (e) {
+      showStatus('extract-status', 'error', '❌ ' + e.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   // --- Preview ---
@@ -264,7 +306,7 @@
       });
       document.getElementById('preview-card').style.display = 'block';
       document.getElementById('preview-title-tag').textContent = data.title || url;
-      document.getElementById('preview-content').textContent = data.processedContent || '(\u65e0\u5185\u5bb9)';
+      document.getElementById('preview-content').textContent = buildMarkdownContent(data, document.getElementById('extract-note').value.trim()) || '(\u65e0\u5185\u5bb9)';
       lastPreview = data;
       showStatus('extract-status', 'success', '\u2705 \u9884\u89c8\u5b8c\u6210 \u2014 \u786e\u8ba4\u65e0\u8bef\u540e\u70b9\u51fb"\u63d0\u53d6\u5e76\u4fdd\u5b58"');
     } catch (e) {
@@ -281,6 +323,11 @@
       showStatus('extract-status', 'error', '\u8bf7\u8f93\u5165\u7f51\u9875\u94fe\u63a5');
       return;
     }
+    var parentId = document.getElementById('parent-select').value.trim();
+    if (!parentId) {
+      showStatus('extract-status', 'error', '\u8bf7\u9009\u62e9\u4e00\u4e2a Notion \u76ee\u6807\u9875\u9762\uff08\u9700\u5728 Notion \u4e2d\u5c06\u9875\u9762\u6388\u6743\u7ed9\u96c6\u6210\uff09');
+      return;
+    }
     hideStatus('extract-status');
     setLoading(true, '\u6b63\u5728\u63d0\u53d6\u5185\u5bb9...', 20);
     try {
@@ -288,7 +335,7 @@
         method: 'POST',
         body: JSON.stringify({
           url: url,
-          parentId: document.getElementById('parent-select').value,
+          parentId: parentId,
           note: document.getElementById('extract-note').value.trim(),
           promptOverride: document.getElementById('prompt-override').value.trim(),
           settings: getSettingsFromForm(),
@@ -315,6 +362,7 @@
   window.onParentSearch = onParentSearch;
   window.doPreview = doPreview;
   window.doExtract = doExtract;
+  window.doExportMarkdown = doExportMarkdown;
   window.copyMarkdown = copyMarkdown;
   window.downloadMarkdown = downloadMarkdown;
   window.onProviderChange = onProviderChange;
