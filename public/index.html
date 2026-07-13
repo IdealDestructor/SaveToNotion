@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>url2notion</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="header">
+    <div class="header-logo">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+      </svg>
+      url2notion
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="extract">提取网页</button>
+      <button class="tab-btn" data-tab="settings">设置</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- Extract Tab -->
+    <div class="tab-panel active" id="panel-extract">
+      <div class="card">
+        <div class="card-title">输入要提取的网页</div>
+        <div class="card-desc">粘贴一个 URL，AI 将自动整理内容并保存到 Notion。</div>
+
+        <div class="form-group">
+          <label for="extract-url">网页链接</label>
+          <input type="url" id="extract-url" placeholder="https://example.com/article" autocomplete="url" />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="parent-select">保存目标 <span class="hint">— 留空则保存到 Notion 工作区</span></label>
+            <select id="parent-select">
+              <option value="">Notion 工作区（根目录）</option>
+            </select>
+            <button class="btn btn-sm btn-secondary" style="margin-top:8px" onclick="loadNotionPages()">加载页面列表</button>
+          </div>
+          <div class="form-group">
+            <label for="extract-note">备注 <span class="hint">（可选）</span></label>
+            <input type="text" id="extract-note" placeholder="添加一条简短备注" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="prompt-override">自定义提示词 <span class="hint">（可选，覆盖默认 AI 指令）</span></label>
+          <textarea id="prompt-override" rows="3" placeholder="在此输入自定义的 AI 指令..."></textarea>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-primary" id="btn-preview" onclick="doPreview()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            预览
+          </button>
+          <button class="btn btn-primary" id="btn-extract" onclick="doExtract()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            提取并保存
+          </button>
+        </div>
+
+        <div class="status" id="extract-status"></div>
+      </div>
+
+      <div class="card" id="preview-card" style="display:none">
+        <div class="card-title">
+          预览
+          <span class="tag tag-green" id="preview-title-tag"></span>
+        </div>
+        <div class="card-desc">AI 处理后的内容预览</div>
+        <div class="preview-box" id="preview-content"></div>
+      </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div class="tab-panel" id="panel-settings">
+      <div class="card">
+        <div class="card-title">Notion 配置</div>
+        <div class="card-desc">在 Notion 的 My Integrations 页面获取 API Key。</div>
+
+        <div class="form-group">
+          <label for="notion-key">Notion API Key</label>
+          <input type="password" id="notion-key" placeholder="nt_xxxxx" />
+        </div>
+
+        <div class="form-group">
+          <label for="notion-version">Notion API Version</label>
+          <input type="text" id="notion-version" value="2022-06-28" />
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-secondary btn-sm" onclick="testNotion()">测试连接</button>
+          <div class="status" id="notion-test-status" style="margin-top:0"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">AI 配置</div>
+        <div class="card-desc">选择 AI 提供商和模型，用于内容整理。</div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="ai-provider">AI 提供商</label>
+            <select id="ai-provider" onchange="onProviderChange()">
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic (Claude)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="ai-model">模型</label>
+            <input type="text" id="ai-model" placeholder="gpt-4o" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="ai-base-url">API Base URL</label>
+          <input type="text" id="ai-base-url" placeholder="https://api.openai.com/v1" />
+        </div>
+
+        <div class="form-group">
+          <label for="ai-key">AI API Key</label>
+          <input type="password" id="ai-key" placeholder="sk-xxxxx" />
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-secondary btn-sm" onclick="testAI()">测试连接</button>
+          <div class="status" id="ai-test-status" style="margin-top:0"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">额外提示词</div>
+        <div class="card-desc">追加到默认 AI 指令之前的自定义内容。</div>
+
+        <div class="form-group">
+          <label for="extra-prompt">自定义提示词</label>
+          <textarea id="extra-prompt" rows="4" placeholder="例如：请用中文总结以下内容..."></textarea>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" id="btn-save-settings" onclick="saveSettings()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          保存设置
+        </button>
+      </div>
+
+      <div class="status" id="settings-status"></div>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="spinner-lg"></div>
+    <div id="loading-text" style="font-size:14px;color:var(--text-secondary)">正在处理...</div>
+    <div class="progress-bar-container">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
