@@ -14,7 +14,7 @@ router.put('/', (req, res) => {
 
 router.post('/test-notion', async (req, res) => {
   try {
-    const result = await settingsService.testNotionConnection();
+    const result = await settingsService.testNotionConnection(req.body);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -23,16 +23,16 @@ router.post('/test-notion', async (req, res) => {
 
 router.post('/test-ai', async (req, res) => {
   try {
-    const result = await settingsService.testAIConnection();
+    const result = await settingsService.testAIConnection(req.body);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/notion-pages', async (req, res) => {
+router.post('/notion-pages', async (req, res) => {
   try {
-    const pages = await settingsService.getNotionPages();
+    const pages = await settingsService.getNotionPages(req.body, req.body.query);
     res.json(pages);
   } catch (err) {
     res.status(500).json({ error: err.message });

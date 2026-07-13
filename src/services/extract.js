@@ -4,11 +4,28 @@ const { NodeHtmlMarkdown } = require('node-html-markdown');
 const settingsService = require('./settings');
 
 async function fetchUrlContent(url) {
-  const res = await axios.get(url, {
-    timeout: 30000,
-    headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) url2notion/1.0' },
-    maxRedirects: 5,
-  });
+  let lastErr;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await axios.get(url, {
+        timeout: 30000,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) savetonotion/1.0' },
+        maxRedirects: 5,
+      });
+      var response = res;
+      break;
+    } catch (err) {
+      lastErr = err;
+      const status = err.response && err.response.status;
+      if (status === 503 || status === 502 || status === 429 || !status) {
+        await new Promise(r => setTimeout(r, Math.min(1000 * Math.pow(2, i), 6000)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  if (!response) throw lastErr;
+  const res = response;
   
   const $ = cheerio.load(res.data);
   $('script, style, noscript, iframe, nav, footer, header, .sidebar, .nav, .menu, .advertisement, .ads, .comment').remove();
@@ -35,8 +52,8 @@ async function fetchUrlContent(url) {
 }
 
 async function processWithAI(rawContent, settings, promptOverride) {
-  const { AI_PROVIDER, AI_BASE_URL, AI_API_KEY, AI_MODEL } = settings;
-  if (!AI_API_KEY) throw new Error('AI API Key not configured');
+  const { aiProvider, aiBaseUrl, aiApiKey, aiModel } = settings;
+  if (!aiApiKey) throw new Error('AI API Key not configured');
   
   const defaultPrompt = `你是一个专业的内容整理助手。请将以下网页内容整理成结构清晰、格式优美的 Notion 笔记。
 
@@ -56,19 +73,19 @@ async function processWithAI(rawContent, settings, promptOverride) {
   ];
   
   let headers = { 'Content-Type': 'application/json' };
-  if (AI_PROVIDER === 'anthropic') {
-    headers['x-api-key'] = AI_API_KEY;
+  if (aiProvider === 'anthropic') {
+    headers['x-api-key'] = aiApiKey;
     headers['anthropic-version'] = '2023-06-01';
   } else {
-    headers['Authorization'] = `Bearer ${AI_API_KEY}`;
+    headers['Authorization'] = `Bearer ${aiApiKey}`;
   }
-  
-  const baseUrl = AI_BASE_URL || 'https://api.openai.com/v1';
-  const isAnthropic = AI_PROVIDER === 'anthropic';
-  
+
+  const baseUrl = aiBaseUrl || 'https://api.openai.com/v1';
+  const isAnthropic = aiProvider === 'anthropic';
+
   const payload = isAnthropic
-    ? { messages, model: AI_MODEL || 'claude-haiku-4-20250514', max_tokens: 8192 }
-    : { messages, model: AI_MODEL || 'gpt-4o', max_tokens: 8192 };
+    ? { messages, model: aiModel || 'claude-haiku-4-20250514', max_tokens: 8192 }
+    : { messages, model: aiModel || 'gpt-4o', max_tokens: 8192 };
   
   const endpoint = isAnthropic ? '/messages' : '/chat/completions';
   const res = await axios.post(`${baseUrl}${endpoint}`, payload, { headers, timeout: 120000 });
@@ -77,46 +94,137 @@ async function processWithAI(rawContent, settings, promptOverride) {
   return res.data.choices?.[0]?.message?.content || '';
 }
 
+const CODE_LANG_MAP = {
+  '': 'plain text', 'text': 'plain text', 'txt': 'plain text', 'plaintext': 'plain text',
+  'sh': 'bash', 'shell': 'bash', 'bash': 'bash', 'zsh': 'bash', 'console': 'bash',
+  'js': 'javascript', 'javascript': 'javascript', 'jsx': 'jsx',
+  'ts': 'typescript', 'typescript': 'typescript', 'tsx': 'typescript',
+  'py': 'python', 'python': 'python', 'python3': 'python',
+  'yml': 'yaml', 'yaml': 'yaml',
+  'c++': 'cpp', 'cpp': 'cpp', 'c': 'c', 'h': 'c',
+  'c#': 'csharp', 'cs': 'csharp', 'csharp': 'csharp',
+  'objective-c': 'objectivec', 'objectivec': 'objectivec',
+  'vb': 'visual basic', 'vb.net': 'vb.net',
+  'md': 'markdown', 'markdown': 'markdown',
+  'dockerfile': 'docker', 'docker': 'docker',
+  'go': 'go', 'golang': 'go', 'rust': 'rust', 'ruby': 'ruby', 'rb': 'ruby',
+  'java': 'java', 'kotlin': 'kotlin', 'sql': 'sql', 'xml': 'xml',
+  'html': 'html', 'css': 'css', 'json': 'json', 'scss': 'scss', 'less': 'less',
+  'php': 'php', 'swift': 'swift', 'r': 'r', 'lua': 'lua', 'perl': 'perl',
+};
+
+function normalizeCodeLang(lang) {
+  if (!lang) return 'plain text';
+  const key = String(lang).toLowerCase().trim();
+  return CODE_LANG_MAP[key] || 'plain text';
+}
+
+function chunkText(text, max) {
+  const out = [];
+  for (let i = 0; i < text.length; i += max) out.push(text.slice(i, i + max));
+  return out.length ? out : [''];
+}
+
+function richText(text, max) {
+  max = max || 1900;
+  return chunkText(text, max).map(t => ({ type: 'text', text: { content: t } }));
+}
+
 function parseMarkdownToBlocks(markdown) {
   const blocks = [];
   const lines = markdown.split('\n');
   let currentParagraph = [];
-  
+  let inCode = false;
+  let codeLang = 'text';
+  let codeBuf = [];
+
   function flushParagraph() {
     if (currentParagraph.length > 0) {
       const text = currentParagraph.join(' ');
       if (text.trim()) {
         blocks.push({
           object: 'block', type: 'paragraph',
-          paragraph: { rich_text: [{ type: 'text', text: { content: text.trim() } }] },
+          paragraph: { rich_text: richText(text.trim()) },
         });
       }
       currentParagraph = [];
     }
   }
-  
+
+  function flushCode() {
+    const content = codeBuf.join('\n');
+    blocks.push({
+      object: 'block', type: 'code',
+      code: { rich_text: richText(content || ''), language: normalizeCodeLang(codeLang) },
+    });
+    codeBuf = [];
+    inCode = false;
+  }
+
   for (const line of lines) {
-    if (line.startsWith('#### ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_4', heading_4: { rich_text: [{ type: 'text', text: { content: line.slice(5) } }] } }); }
-    else if (line.startsWith('### ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_3', heading_3: { rich_text: [{ type: 'text', text: { content: line.slice(4) } }] } }); }
-    else if (line.startsWith('## ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: line.slice(3) } }] } }); }
-    else if (line.startsWith('# ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_1', heading_1: { rich_text: [{ type: 'text', text: { content: line.slice(2) } }] } }); }
-    else if (line.startsWith('> ')) { flushParagraph(); blocks.push({ object: 'block', type: 'quote', quote: { rich_text: [{ type: 'text', text: { content: line.slice(2) } }] } }); }
-    else if (line.startsWith('- ') || line.startsWith('* ')) { flushParagraph(); blocks.push({ object: 'block', type: 'bulleted_list_item', bulleted_list_item: { rich_text: [{ type: 'text', text: { content: line.slice(2) } }] } }); }
-    else if (/^\d+\.\s/.test(line)) { flushParagraph(); blocks.push({ object: 'block', type: 'numbered_list_item', numbered_list_item: { rich_text: [{ type: 'text', text: { content: line.replace(/^\d+\.\s/, '') } }] } }); }
-    else if (line.startsWith('```')) { flushParagraph(); blocks.push({ object: 'block', type: 'code', code: { rich_text: [{ type: 'text', text: { content: '' } }], language: 'text' } }); }
+    if (line.startsWith('```')) {
+      if (inCode) { flushCode(); }
+      else { flushParagraph(); inCode = true; codeLang = line.slice(3).trim() || 'text'; }
+      continue;
+    }
+    if (inCode) { codeBuf.push(line); continue; }
+
+    if (line.startsWith('#### ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_4', heading_4: { rich_text: richText(line.slice(5)) } }); }
+    else if (line.startsWith('### ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_3', heading_3: { rich_text: richText(line.slice(4)) } }); }
+    else if (line.startsWith('## ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_2', heading_2: { rich_text: richText(line.slice(3)) } }); }
+    else if (line.startsWith('# ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_1', heading_1: { rich_text: richText(line.slice(2)) } }); }
+    else if (line.startsWith('> ')) { flushParagraph(); blocks.push({ object: 'block', type: 'quote', quote: { rich_text: richText(line.slice(2)) } }); }
+    else if (line.startsWith('- ') || line.startsWith('* ')) { flushParagraph(); blocks.push({ object: 'block', type: 'bulleted_list_item', bulleted_list_item: { rich_text: richText(line.slice(2)) } }); }
+    else if (/^\d+\.\s/.test(line)) { flushParagraph(); blocks.push({ object: 'block', type: 'numbered_list_item', numbered_list_item: { rich_text: richText(line.replace(/^\d+\.\s/, '')) } }); }
     else if (line.trim() === '') { flushParagraph(); }
     else { currentParagraph.push(line); }
   }
+  if (inCode) flushCode();
   flushParagraph();
   return blocks;
 }
 
+async function postWithRetry(url, body, headers, attempts) {
+  attempts = attempts || 4;
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await axios.post(url, body, { headers });
+    } catch (err) {
+      lastErr = err;
+      const status = err.response && err.response.status;
+      if (status === 503 || status === 502 || status === 429) {
+        const delay = Math.min(1000 * Math.pow(2, i), 8000);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw enhancedErr(err);
+    }
+  }
+  throw enhancedErr(lastErr);
+}
+
+function enhancedErr(err) {
+  if (!err) return new Error('Unknown error');
+  const status = err.response && err.response.status;
+  const data = err.response && err.response.data;
+  let msg = err.message;
+  if (data) {
+    if (typeof data === 'string') msg += ` | ${data}`;
+    else msg += ` | ${data.status || ''} ${data.code || ''} ${data.message || JSON.stringify(data)}`;
+  }
+  const e = new Error(msg);
+  e.status = status;
+  return e;
+}
+
 async function saveToNotion(processedContent, title, settings, parentId, note) {
-  const { NOTION_API_KEY } = settingsService.getAll();
-  if (!NOTION_API_KEY) throw new Error('Notion API Key not configured');
+  if (!settings) settings = settingsService.getAll();
+  const { notionApiKey } = settings;
+  if (!notionApiKey) throw new Error('Notion API Key not configured');
   
   const headers = {
-    Authorization: `Bearer ${NOTION_API_KEY}`,
+    Authorization: `Bearer ${notionApiKey}`,
     'Content-Type': 'application/json',
     'Notion-Version': settings.notionVersion || '2022-06-28',
   };
@@ -124,36 +232,64 @@ async function saveToNotion(processedContent, title, settings, parentId, note) {
   const notionContent = processedContent + (note ? `\n\n> 💡 备注: ${note}` : '');
   const blocks = parseMarkdownToBlocks(notionContent);
   
+  // Resolve the parent's title property name (defaults to "title"; child pages may use "Name" etc.)
+  let titlePropName = 'title';
+  if (parentId) {
+    try {
+      const parentRes = await axios.get(`https://api.notion.com/v1/pages/${parentId}`, { headers });
+      const props = (parentRes.data && parentRes.data.properties) || {};
+      for (const key of Object.keys(props)) {
+        if (props[key] && props[key].type === 'title') { titlePropName = key; break; }
+      }
+    } catch (e) { /* fall back to "title" */ }
+  }
+  
   // Create page
-  const createRes = await axios.post('https://api.notion.com/v1/pages', {
+  const createRes = await postWithRetry('https://api.notion.com/v1/pages', {
     parent: parentId ? { page_id: parentId } : { workspace: true },
-    properties: { title: [{ type: 'text', text: { content: title } }] },
-  }, { headers });
+    properties: { [titlePropName]: richText(title || 'Untitled', 1900).slice(0, 1) },
+  }, headers);
   
   const pageId = createRes.data.id;
   
-  // Append content blocks
-  await axios.post(`https://api.notion.com/v1/blocks/${pageId}/children`, { children: blocks }, { headers });
+  // Append content blocks in batches of 100 (Notion limit)
+  for (let i = 0; i < blocks.length; i += 100) {
+    const batch = blocks.slice(i, i + 100);
+    await postWithRetry(`https://api.notion.com/v1/blocks/${pageId}/children`, { children: batch }, headers);
+  }
   
   return { success: true, pageId };
 }
 
-async function extractAndSave(url, parentId, note, promptOverride) {
-  const settings = settingsService.getAll();
-  console.log(`Fetching URL: ${url}`);
-  const rawContent = await fetchUrlContent(url);
-  
-  console.log('Processing with AI...');
-  const processedContent = await processWithAI(rawContent, settings, promptOverride);
-  
-  console.log('Saving to Notion...');
-  const result = await saveToNotion(processedContent, rawContent.title, settings, parentId, note);
-  
-  return { success: true, title: rawContent.title, url: rawContent.url, notionResult: result };
+async function extractAndSave(url, parentId, note, promptOverride, settings) {
+  settings = settings || settingsService.getAll();
+  let rawContent;
+  try {
+    console.log(`Fetching URL: ${url}`);
+    rawContent = await fetchUrlContent(url);
+  } catch (err) {
+    throw new Error('抓取网页失败: ' + err.message);
+  }
+
+  let processedContent;
+  try {
+    console.log('Processing with AI...');
+    processedContent = await processWithAI(rawContent, settings, promptOverride);
+  } catch (err) {
+    throw new Error('AI 整理失败: ' + err.message);
+  }
+
+  try {
+    console.log('Saving to Notion...');
+    const result = await saveToNotion(processedContent, rawContent.title, settings, parentId, note);
+    return { success: true, title: rawContent.title, url: rawContent.url, notionResult: result };
+  } catch (err) {
+    throw new Error('保存到 Notion 失败: ' + err.message);
+  }
 }
 
-async function preview(url, promptOverride) {
-  const settings = settingsService.getAll();
+async function preview(url, promptOverride, settings) {
+  settings = settings || settingsService.getAll();
   const rawContent = await fetchUrlContent(url);
   const processedContent = await processWithAI(rawContent, settings, promptOverride);
   return { title: rawContent.title, url: rawContent.url, rawContent: rawContent.content, processedContent };

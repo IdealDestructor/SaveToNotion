@@ -1,9 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
 const path = require('path');
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -31,5 +28,5 @@ app.get('/*splat', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 url2notion running at http://localhost:${PORT}`);
+  console.log(`🚀 SaveToNotion running at http://localhost:${PORT}`);
 });

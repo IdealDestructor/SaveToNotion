@@ -56,17 +56,49 @@
     }
   }
 
+  // --- Local storage for settings ---
+  var STORAGE_KEY = 'savetonotion-settings';
+  var LEGACY_KEY = 'u2n-settings';
+  var DEFAULTS = {
+    notionApiKey: '', notionVersion: '2022-06-28', aiProvider: 'openai',
+    aiModel: 'gpt-4o', aiBaseUrl: 'https://api.openai.com/v1', aiApiKey: '', extraPrompt: ''
+  };
+  function loadLocalSettings() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw && LEGACY_KEY) raw = localStorage.getItem(LEGACY_KEY);
+      return Object.assign({}, DEFAULTS, JSON.parse(raw || '{}'));
+    }
+    catch (e) { return Object.assign({}, DEFAULTS); }
+  }
+  function saveLocalSettings(s) { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+  function getSettingsFromForm() {
+    return {
+      notionApiKey: document.getElementById('notion-key').value.trim(),
+      notionVersion: document.getElementById('notion-version').value.trim(),
+      aiProvider: document.getElementById('ai-provider').value,
+      aiModel: document.getElementById('ai-model').value.trim(),
+      aiBaseUrl: document.getElementById('ai-base-url').value.trim(),
+      aiApiKey: document.getElementById('ai-key').value.trim(),
+      extraPrompt: document.getElementById('extra-prompt').value.trim(),
+    };
+  }
+  function applySettingsToForm(s) {
+    document.getElementById('notion-key').value = s.notionApiKey || '';
+    document.getElementById('notion-version').value = s.notionVersion || '2022-06-28';
+    document.getElementById('ai-provider').value = s.aiProvider || 'openai';
+    document.getElementById('ai-model').value = s.aiModel || 'gpt-4o';
+    document.getElementById('ai-base-url').value = s.aiBaseUrl || 'https://api.openai.com/v1';
+    document.getElementById('ai-key').value = s.aiApiKey || '';
+    document.getElementById('extra-prompt').value = s.extraPrompt || '';
+  }
+
   // --- Load settings ---
   async function loadSettings() {
     try {
-      settingsCache = await api('/settings');
-      document.getElementById('notion-key').value = settingsCache.notionApiKey || '';
-      document.getElementById('notion-version').value = settingsCache.notionVersion || '2022-06-28';
-      document.getElementById('ai-provider').value = settingsCache.aiProvider || 'openai';
-      document.getElementById('ai-model').value = settingsCache.aiModel || 'gpt-4o';
-      document.getElementById('ai-base-url').value = settingsCache.aiBaseUrl || 'https://api.openai.com/v1';
-      document.getElementById('ai-key').value = settingsCache.aiApiKey || '';
-      document.getElementById('extra-prompt').value = settingsCache.extraPrompt || '';
+      var s = loadLocalSettings();
+      applySettingsToForm(s);
+      settingsCache = s;
       onProviderChange();
     } catch (e) {
       console.error('Failed to load settings:', e);
@@ -78,20 +110,10 @@
     var btn = document.getElementById('btn-save-settings');
     btn.disabled = true;
     try {
-      await api('/settings', {
-        method: 'PUT',
-        body: JSON.stringify({
-          notionApiKey: document.getElementById('notion-key').value.trim(),
-          notionVersion: document.getElementById('notion-version').value.trim(),
-          aiProvider: document.getElementById('ai-provider').value,
-          aiModel: document.getElementById('ai-model').value.trim(),
-          aiBaseUrl: document.getElementById('ai-base-url').value.trim(),
-          aiApiKey: document.getElementById('ai-key').value.trim(),
-          extraPrompt: document.getElementById('extra-prompt').value.trim(),
-        }),
-      });
+      var s = getSettingsFromForm();
+      saveLocalSettings(s);
+      settingsCache = s;
       showStatus('settings-status', 'success', '\u2705 \u8bbe\u7f6e\u5df2\u4fdd\u5b58');
-      loadSettings();
     } catch (e) {
       showStatus('settings-status', 'error', '\u274c ' + e.message);
     } finally {
@@ -103,7 +125,7 @@
   async function testNotion() {
     showStatus('notion-test-status', '', '\u6b63\u5728\u6d4b\u8bd5...', true);
     try {
-      await api('/settings/test-notion');
+      await api('/settings/test-notion', { method: 'POST', body: JSON.stringify(getSettingsFromForm()) });
       showStatus('notion-test-status', 'success', '\u2705 Notion \u8fde\u63a5\u6b63\u5e38');
     } catch (e) {
       showStatus('notion-test-status', 'error', '\u274c ' + e.message);
@@ -114,7 +136,7 @@
   async function testAI() {
     showStatus('ai-test-status', '', '\u6b63\u5728\u6d4b\u8bd5...', true);
     try {
-      await api('/settings/test-ai');
+      await api('/settings/test-ai', { method: 'POST', body: JSON.stringify(getSettingsFromForm()) });
       showStatus('ai-test-status', 'success', '\u2705 AI \u8fde\u63a5\u6b63\u5e38');
     } catch (e) {
       showStatus('ai-test-status', 'error', '\u274c ' + e.message);
@@ -135,26 +157,95 @@
     }
   }
 
-  // --- Load Notion pages ---
-  async function loadNotionPages() {
+  // --- Load Notion pages (tree + search) ---
+  var parentSearchTimer = null;
+
+  function renderParentTree(pages, selectedId) {
     var sel = document.getElementById('parent-select');
-    sel.innerHTML = '<option value="">\u52a0\u8f7d\u4e2d...</option>';
-    try {
-      var data = await api('/settings/notion-pages');
-      sel.innerHTML = '<option value="">Notion \u5de5\u4f5c\u533a\uff08\u6839\u76ee\u5f55\uff09</option>';
-      var pages = data.pages || [];
-      for (var i = 0; i < pages.length; i++) {
-        var opt = document.createElement('option');
-        opt.value = pages[i].id;
-        opt.textContent = pages[i].title;
-        sel.appendChild(opt);
-      }
-      if (pages.length === 0) {
-        sel.innerHTML = '<option value="">Notion \u5de5\u4f5c\u533a\uff08\u6839\u76ee\u5f55\uff09</option>';
-      }
-    } catch (e) {
-      sel.innerHTML = '<option value="">\u52a0\u8f7d\u5931\u8d25: ' + e.message + '</option>';
+    sel.innerHTML = '<option value="">Notion 工作区（根目录）</option>';
+    if (!pages || !pages.length) return;
+    var byId = {};
+    pages.forEach(function (p) {
+      byId[p.id] = { id: p.id, title: p.title || 'Untitled', parentId: p.parentId, children: [] };
+    });
+    var roots = [];
+    pages.forEach(function (p) {
+      var node = byId[p.id];
+      if (p.parentId && byId[p.parentId]) byId[p.parentId].children.push(node);
+      else roots.push(node);
+    });
+    function sortNodes(nodes) {
+      nodes.sort(function (a, b) { return a.title.localeCompare(b.title); });
+      nodes.forEach(function (n) { sortNodes(n.children); });
     }
+    sortNodes(roots);
+    var flat = [];
+    (function flatten(nodes, depth) {
+      nodes.forEach(function (n) {
+        flat.push({ id: n.id, title: n.title, depth: depth });
+        flatten(n.children, depth + 1);
+      });
+    })(roots, 0);
+    flat.forEach(function (n) {
+      var opt = document.createElement('option');
+      opt.value = n.id;
+      opt.textContent = (n.depth > 0 ? ' '.repeat(n.depth) + '↳ ' : '') + n.title;
+      if (n.id === selectedId) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  async function loadNotionPages(query) {
+    var sel = document.getElementById('parent-select');
+    var selected = sel.value;
+    sel.innerHTML = '<option value="">加载中...</option>';
+    try {
+      var payload = getSettingsFromForm();
+      if (query) payload.query = query;
+      var data = await api('/settings/notion-pages', { method: 'POST', body: JSON.stringify(payload) });
+      renderParentTree(data.pages || [], selected);
+    } catch (e) {
+      sel.innerHTML = '<option value="">加载失败: ' + e.message + '</option>';
+    }
+  }
+
+  function onParentSearch() {
+    if (parentSearchTimer) clearTimeout(parentSearchTimer);
+    parentSearchTimer = setTimeout(function () {
+      loadNotionPages(document.getElementById('parent-search').value.trim());
+    }, 300);
+  }
+
+  // --- Markdown export ---
+  let lastPreview = null;
+
+  function sanitizeFilename(name) {
+    name = (name || 'savetonotion-export').trim().replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_');
+    return name.slice(0, 80) || 'savetonotion-export';
+  }
+
+  async function copyMarkdown() {
+    if (!lastPreview) return;
+    try {
+      await navigator.clipboard.writeText(lastPreview.processedContent || '');
+      showStatus('extract-status', 'success', '✅ 已复制到剪贴板');
+    } catch (e) {
+      showStatus('extract-status', 'error', '❌ 复制失败：' + e.message);
+    }
+  }
+
+  function downloadMarkdown() {
+    if (!lastPreview) return;
+    var md = lastPreview.processedContent || '';
+    var blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = sanitizeFilename(lastPreview.title) + '.md';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   // --- Preview ---
@@ -169,11 +260,12 @@
     try {
       var data = await api('/extract/preview', {
         method: 'POST',
-        body: JSON.stringify({ url: url }),
+        body: JSON.stringify({ url: url, settings: getSettingsFromForm() }),
       });
       document.getElementById('preview-card').style.display = 'block';
       document.getElementById('preview-title-tag').textContent = data.title || url;
       document.getElementById('preview-content').textContent = data.processedContent || '(\u65e0\u5185\u5bb9)';
+      lastPreview = data;
       showStatus('extract-status', 'success', '\u2705 \u9884\u89c8\u5b8c\u6210 \u2014 \u786e\u8ba4\u65e0\u8bef\u540e\u70b9\u51fb"\u63d0\u53d6\u5e76\u4fdd\u5b58"');
     } catch (e) {
       showStatus('extract-status', 'error', '\u274c ' + e.message);
@@ -199,6 +291,7 @@
           parentId: document.getElementById('parent-select').value,
           note: document.getElementById('extract-note').value.trim(),
           promptOverride: document.getElementById('prompt-override').value.trim(),
+          settings: getSettingsFromForm(),
         }),
       });
       setLoading(true, '\u6b63\u5728\u4fdd\u5b58\u5230 Notion...', 60);
@@ -213,4 +306,16 @@
 
   // --- Init ---
   loadSettings();
+
+  // Expose handlers so inline onclick/onchange in HTML can reach them
+  window.saveSettings = saveSettings;
+  window.testNotion = testNotion;
+  window.testAI = testAI;
+  window.loadNotionPages = loadNotionPages;
+  window.onParentSearch = onParentSearch;
+  window.doPreview = doPreview;
+  window.doExtract = doExtract;
+  window.copyMarkdown = copyMarkdown;
+  window.downloadMarkdown = downloadMarkdown;
+  window.onProviderChange = onProviderChange;
 })();

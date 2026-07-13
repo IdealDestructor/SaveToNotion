@@ -6,7 +6,7 @@ router.post('/', async (req, res) => {
   try {
     const { url, parentId, note, promptOverride } = req.body;
     if (!url) return res.status(400).json({ error: 'URL is required' });
-    const result = await extractService.extractAndSave(url, parentId, note, promptOverride);
+    const result = await extractService.extractAndSave(url, parentId, note, promptOverride, req.body.settings);
     res.json(result);
   } catch (err) {
     console.error('Extract error:', err);
@@ -18,7 +18,7 @@ router.post('/preview', async (req, res) => {
   try {
     const { url, promptOverride } = req.body;
     if (!url) return res.status(400).json({ error: 'URL is required' });
-    const result = await extractService.preview(url, promptOverride);
+    const result = await extractService.preview(url, promptOverride, req.body.settings);
     res.json(result);
   } catch (err) {
     console.error('Preview error:', err);

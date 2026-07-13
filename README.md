@@ -1,4 +1,4 @@
-# url2notion
+# SaveToNotion
 
 一键提取网页内容，经 AI 整理后保存到 Notion。
 
@@ -22,33 +22,18 @@
 ### 安装
 
 ```bash
-git clone https://github.com/IdealDestructor/url2notion.git
-cd url2notion
+git clone https://github.com/IdealDestructor/savetonotion.git
+cd savetonotion
 npm install
 ```
 
 ### 配置
 
-复制环境变量文件并填入配置：
+配置（Notion / AI 密钥等）保存在**浏览器的 localStorage** 中，点击「设置」页的「保存设置」即生效，无需服务端文件，也不会随仓库提交。
 
-```bash
-cp .env.example .env
-```
+如需手动重置，在浏览器控制台执行 `localStorage.removeItem('savetonotion-settings')` 即可。
 
-编辑 `.env` 文件：
-
-```env
-NOTION_API_KEY=nt_xxxxx
-NOTION_VERSION=2022-06-28
-PORT=3000
-AI_PROVIDER=openai
-AI_MODEL=gpt-4o
-AI_BASE_URL=https://api.openai.com/v1
-AI_API_KEY=sk-xxxxx
-EXTRA_PROMPT=
-```
-
-> 你也可以在 Web UI 的「设置」页面中完成所有配置。
+> 端口可用环境变量 `PORT` 覆盖（默认 3000）。
 
 ### 启动
 
@@ -82,13 +67,21 @@ npm run dev
 { "url": "https://example.com", "promptOverride": "" }
 ```
 
-### `GET /api/settings`
+### `POST /api/settings/notion-pages`
 
-获取当前设置。
+获取 Notion 页面列表（树状，支持 `query` 搜索）。
 
-### `PUT /api/settings`
+```json
+{ "notionApiKey": "...", "notionVersion": "2022-06-28", "query": "" }
+```
 
-更新设置。
+### `POST /api/settings/test-notion`
+
+校验 Notion 连接。
+
+### `POST /api/settings/test-ai`
+
+校验 AI 连接。
 
 ### `GET /api/health`
 

@@ -3,62 +3,98 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>url2notion</title>
+  <title>SaveToNotion · Extract Webpage to Notion</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 46 46'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='46' y2='46'%3E%3Cstop stop-color='%236366f1'/%3E%3Cstop offset='1' stop-color='%23a855f7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='46' height='46' rx='13' fill='url(%23g)'/%3E%3Cg transform='translate(11,11)'%3E%3Cpath d='M2 21l21-9L2 3v7l15 2-15 2z' fill='%23fff'/%3E%3C/g%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <div class="header">
-    <div class="header-logo">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-      </svg>
-      url2notion
-    </div>
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="extract">提取网页</button>
-      <button class="tab-btn" data-tab="settings">设置</button>
-    </div>
+  <div class="bg-orbs" aria-hidden="true">
+    <span class="orb orb-1"></span>
+    <span class="orb orb-2"></span>
   </div>
 
-  <div class="main">
+  <header class="header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="SaveToNotion">
+        <span class="brand-mark">
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="stnGrad" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#6366f1"/>
+                <stop offset="1" stop-color="#a855f7"/>
+              </linearGradient>
+            </defs>
+            <rect width="48" height="48" rx="14" fill="url(#stnGrad)"/>
+            <rect x="1.2" y="1.2" width="45.6" height="45.6" rx="12.8" fill="none" stroke="#fff" stroke-opacity="0.25" stroke-width="1.2"/>
+            <g transform="translate(12,12)">
+              <path d="M2 21l21-9L2 3v7l15 2-15 2z" fill="#fff"/>
+            </g>
+          </svg>
+        </span>
+        <span class="brand-text">
+          <span class="brand-name">SaveToNotion</span>
+        </span>
+      </a>
+
+      <nav class="tabs">
+        <button class="tab-btn active" data-tab="extract">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          提取网页
+        </button>
+        <button class="tab-btn" data-tab="settings">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          设置
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main">
     <!-- Extract Tab -->
-    <div class="tab-panel active" id="panel-extract">
-      <div class="card">
-        <div class="card-title">输入要提取的网页</div>
-        <div class="card-desc">粘贴一个 URL，AI 将自动整理内容并保存到 Notion。</div>
+    <section class="tab-panel active" id="panel-extract">
+      <div class="hero">
+        <h1 class="hero-title">把一个网页<span class="grad">变成一篇 Notion 笔记</span></h1>
+        <p class="hero-desc">粘贴链接，AI 自动提炼正文、整理为结构化 Markdown，一键存入 Notion。</p>
+      </div>
+
+      <div class="card card-feature">
+        <div class="card-title">提取网页</div>
+        <div class="card-desc">支持自定义保存位置与提示词。</div>
 
         <div class="form-group">
           <label for="extract-url">网页链接</label>
-          <input type="url" id="extract-url" placeholder="https://example.com/article" autocomplete="url" />
+          <div class="input-wrap">
+            <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <input type="url" id="extract-url" placeholder="https://example.com/article" autocomplete="url" />
+          </div>
         </div>
 
         <div class="form-row">
           <div class="form-group">
-            <label for="parent-select">保存目标 <span class="hint">— 留空则保存到 Notion 工作区</span></label>
-            <select id="parent-select">
+            <label for="parent-search">保存目标 <span class="hint">留空则存到工作区根目录</span></label>
+            <input type="text" id="parent-search" placeholder="搜索 Notion 页面..." oninput="onParentSearch()" onfocus="loadNotionPages()" />
+            <select id="parent-select" style="margin-top:8px">
               <option value="">Notion 工作区（根目录）</option>
             </select>
-            <button class="btn btn-sm btn-secondary" style="margin-top:8px" onclick="loadNotionPages()">加载页面列表</button>
           </div>
           <div class="form-group">
-            <label for="extract-note">备注 <span class="hint">（可选）</span></label>
+            <label for="extract-note">备注 <span class="hint">可选</span></label>
             <input type="text" id="extract-note" placeholder="添加一条简短备注" />
           </div>
         </div>
 
         <div class="form-group">
-          <label for="prompt-override">自定义提示词 <span class="hint">（可选，覆盖默认 AI 指令）</span></label>
-          <textarea id="prompt-override" rows="3" placeholder="在此输入自定义的 AI 指令..."></textarea>
+          <label for="prompt-override">自定义提示词 <span class="hint">可选，覆盖默认 AI 指令</span></label>
+          <textarea id="prompt-override" rows="3" placeholder="例如：用中文总结，保留所有小标题..."></textarea>
         </div>
 
         <div class="btn-group">
-          <button class="btn btn-primary" id="btn-preview" onclick="doPreview()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <button class="btn btn-secondary" id="btn-preview" onclick="doPreview()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             预览
           </button>
           <button class="btn btn-primary" id="btn-extract" onclick="doExtract()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             提取并保存
           </button>
         </div>
@@ -67,24 +103,37 @@
       </div>
 
       <div class="card" id="preview-card" style="display:none">
-        <div class="card-title">
+        <div class="card-title d-flex">
           预览
           <span class="tag tag-green" id="preview-title-tag"></span>
         </div>
         <div class="card-desc">AI 处理后的内容预览</div>
         <div class="preview-box" id="preview-content"></div>
+        <div class="preview-actions">
+          <button class="btn btn-secondary btn-sm" id="btn-copy-md" onclick="copyMarkdown()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            复制
+          </button>
+          <button class="btn btn-primary btn-sm" id="btn-download-md" onclick="downloadMarkdown()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下载 Markdown
+          </button>
+        </div>
       </div>
-    </div>
+    </section>
 
     <!-- Settings Tab -->
-    <div class="tab-panel" id="panel-settings">
+    <section class="tab-panel" id="panel-settings">
       <div class="card">
         <div class="card-title">Notion 配置</div>
-        <div class="card-desc">在 Notion 的 My Integrations 页面获取 API Key。</div>
+        <div class="card-desc">在 Notion 的 <a class="link" href="https://www.notion.so/my-integrations" target="_blank" rel="noreferrer">My Integrations</a> 页面创建集成并获取 API Key。</div>
 
         <div class="form-group">
           <label for="notion-key">Notion API Key</label>
-          <input type="password" id="notion-key" placeholder="nt_xxxxx" />
+          <div class="input-wrap">
+            <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" id="notion-key" placeholder="nt_xxxxx" />
+          </div>
         </div>
 
         <div class="form-group">
@@ -94,13 +143,13 @@
 
         <div class="btn-group">
           <button class="btn btn-secondary btn-sm" onclick="testNotion()">测试连接</button>
-          <div class="status" id="notion-test-status" style="margin-top:0"></div>
+          <div class="status inline" id="notion-test-status"></div>
         </div>
       </div>
 
       <div class="card">
         <div class="card-title">AI 配置</div>
-        <div class="card-desc">选择 AI 提供商和模型，用于内容整理。</div>
+        <div class="card-desc">选择 AI 提供商与模型，用于内容整理。</div>
 
         <div class="form-row">
           <div class="form-group">
@@ -123,18 +172,21 @@
 
         <div class="form-group">
           <label for="ai-key">AI API Key</label>
-          <input type="password" id="ai-key" placeholder="sk-xxxxx" />
+          <div class="input-wrap">
+            <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" id="ai-key" placeholder="sk-xxxxx" />
+          </div>
         </div>
 
         <div class="btn-group">
           <button class="btn btn-secondary btn-sm" onclick="testAI()">测试连接</button>
-          <div class="status" id="ai-test-status" style="margin-top:0"></div>
+          <div class="status inline" id="ai-test-status"></div>
         </div>
       </div>
 
       <div class="card">
         <div class="card-title">额外提示词</div>
-        <div class="card-desc">追加到默认 AI 指令之前的自定义内容。</div>
+        <div class="card-desc">会追加到默认 AI 指令之前。</div>
 
         <div class="form-group">
           <label for="extra-prompt">自定义提示词</label>
@@ -144,21 +196,29 @@
 
       <div class="btn-group">
         <button class="btn btn-primary" id="btn-save-settings" onclick="saveSettings()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           保存设置
         </button>
       </div>
 
       <div class="status" id="settings-status"></div>
-    </div>
-  </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span class="footer-brand">SaveToNotion</span> · 把网页优雅地搬进 Notion
+  </footer>
 
   <!-- Loading Overlay -->
   <div class="loading-overlay" id="loading-overlay">
-    <div class="spinner-lg"></div>
-    <div id="loading-text" style="font-size:14px;color:var(--text-secondary)">正在处理...</div>
-    <div class="progress-bar-container">
-      <div class="progress-bar" id="progress-bar"></div>
+    <div class="loading-card">
+      <div class="loader-ring">
+        <span class="loader-dot"></span>
+        <span class="loader-dot"></span>
+        <span class="loader-dot"></span>
+      </div>
+      <div id="loading-text">正在处理...</div>
+      <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
     </div>
   </div>
 

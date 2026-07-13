@@ -1,118 +1,136 @@
-const fs = require('fs').promises;
+const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 
-const ENV_PATH = path.join(__dirname, '..', '..', '.env');
+const STORE_PATH = path.join(__dirname, '..', '..', 'data', 'settings.json');
 
-function loadEnv() {
+const DEFAULTS = {
+  notionApiKey: '',
+  notionVersion: '2022-06-28',
+  aiProvider: 'openai',
+  aiModel: 'gpt-4o',
+  aiBaseUrl: 'https://api.openai.com/v1',
+  aiApiKey: '',
+  extraPrompt: '',
+};
+
+function loadStore() {
   try {
-    const content = fs.readFileSync(ENV_PATH, 'utf-8');
-    const parsed = {};
-    content.split('\n').forEach(line => {
-      line = line.trim();
-      if (line && !line.startsWith('#')) {
-        const [key, ...valueParts] = line.split('=');
-        if (key && valueParts.length > 0) {
-          parsed[key.trim()] = valueParts.join('=').trim().replace(/^["']|["']$/g, '');
-        }
-      }
-    });
-    return parsed;
+    const content = fs.readFileSync(STORE_PATH, 'utf-8');
+    return { ...DEFAULTS, ...JSON.parse(content) };
   } catch {
-    return {};
+    return { ...DEFAULTS };
   }
 }
 
-async function saveEnv(env) {
-  const existing = loadEnv();
-  const merged = { ...existing, ...env };
-  Object.keys(merged).forEach(k => {
-    if (!merged[k]) delete merged[k];
-  });
-  const lines = Object.entries(merged).map(([k, v]) => `${k}=${v}`).join('\n') + '\n';
-  await fs.writeFile(ENV_PATH, lines);
+function saveStore(store) {
+  fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true });
+  fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2));
 }
 
 function getAll() {
-  const env = loadEnv();
-  return {
-    notionApiKey: env.NOTION_API_KEY || '',
-    notionVersion: env.NOTION_VERSION || '2022-06-28',
-    aiProvider: env.AI_PROVIDER || 'openai',
-    aiModel: env.AI_MODEL || 'gpt-4o',
-    aiBaseUrl: env.AI_BASE_URL || 'https://api.openai.com/v1',
-    aiApiKey: env.AI_API_KEY || '',
-    extraPrompt: env.EXTRA_PROMPT || '',
-  };
+  return loadStore();
 }
 
 async function update(updates) {
-  const env = {};
-  if (updates.notionApiKey !== undefined) env.NOTION_API_KEY = updates.notionApiKey;
-  if (updates.notionVersion !== undefined) env.NOTION_VERSION = updates.notionVersion;
-  if (updates.aiProvider !== undefined) env.AI_PROVIDER = updates.aiProvider;
-  if (updates.aiModel !== undefined) env.AI_MODEL = updates.aiModel;
-  if (updates.aiBaseUrl !== undefined) env.AI_BASE_URL = updates.aiBaseUrl;
-  if (updates.aiApiKey !== undefined) env.AI_API_KEY = updates.aiApiKey;
-  if (updates.extraPrompt !== undefined) env.EXTRA_PROMPT = updates.extraPrompt;
-  await saveEnv(env);
+  const store = loadStore();
+  if (updates.notionApiKey !== undefined) store.notionApiKey = updates.notionApiKey;
+  if (updates.notionVersion !== undefined) store.notionVersion = updates.notionVersion;
+  if (updates.aiProvider !== undefined) store.aiProvider = updates.aiProvider;
+  if (updates.aiModel !== undefined) store.aiModel = updates.aiModel;
+  if (updates.aiBaseUrl !== undefined) store.aiBaseUrl = updates.aiBaseUrl;
+  if (updates.aiApiKey !== undefined) store.aiApiKey = updates.aiApiKey;
+  if (updates.extraPrompt !== undefined) store.extraPrompt = updates.extraPrompt;
+  saveStore(store);
 }
 
-function getNotionHeaders() {
-  const env = loadEnv();
-  const apiKey = env.NOTION_API_KEY;
+function getNotionHeaders(settings) {
+  const store = settings || loadStore();
+  const apiKey = store.notionApiKey;
   if (!apiKey) throw new Error('Notion API Key not configured');
   return {
     Authorization: `Bearer ${apiKey}`,
     'Content-Type': 'application/json',
-    'Notion-Version': env.NOTION_VERSION || '2022-06-28',
+    'Notion-Version': store.notionVersion || '2022-06-28',
   };
 }
 
-async function testNotionConnection() {
-  const res = await axios.get('https://api.notion.com/v1/users/me', { headers: getNotionHeaders() });
+async function testNotionConnection(settings) {
+  const res = await axios.get('https://api.notion.com/v1/users/me', { headers: getNotionHeaders(settings) });
   return { success: true, user: res.data };
 }
 
-async function getNotionPages() {
-  const searchRes = await axios.post('https://api.notion.com/v1/search', {
-    filter: { property: 'object', value: 'page' },
-  }, { headers: getNotionHeaders() });
-  
-  const pages = searchRes.data.results.slice(0, 50).map(page => ({
-    id: page.id,
-    title: page.properties?.Title?.title?.[0]?.plain_text 
-      || page.properties?.name?.title?.[0]?.plain_text 
-      || 'Untitled',
-    type: 'page',
-  }));
-  
+function extractPageTitle(page) {
+  const props = page.properties || {};
+  // Prefer the property whose type is 'title' (name varies per page)
+  for (const key of Object.keys(props)) {
+    const prop = props[key];
+    if (prop && prop.type === 'title' && Array.isArray(prop.title) && prop.title.length) {
+      const text = prop.title.map(t => t.plain_text || '').join('');
+      if (text) return text;
+    }
+  }
+  // Fallbacks for common property names
+  for (const name of ['title', 'Title', 'name', 'Name']) {
+    const arr = props[name] && props[name].title;
+    if (Array.isArray(arr) && arr.length) {
+      const text = arr.map(t => t.plain_text || '').join('');
+      if (text) return text;
+    }
+  }
+  return 'Untitled';
+}
+
+async function getNotionPages(settings, query) {
+  const headers = getNotionHeaders(settings);
+  const pages = [];
+  let startCursor;
+  let hasMore = true;
+  let guard = 0;
+
+  while (hasMore && guard < 5) {
+    guard++;
+    const body = { filter: { property: 'object', value: 'page' }, page_size: 100 };
+    if (query) body.query = query;
+    if (startCursor) body.start_cursor = startCursor;
+
+    const res = await axios.post('https://api.notion.com/v1/search', body, { headers });
+    const results = (res.data && res.data.results) || [];
+    for (const page of results) {
+      const parent = page.parent;
+      const parentId = parent && parent.type === 'page_id' ? parent.page_id : null;
+      pages.push({ id: page.id, title: extractPageTitle(page), parentId });
+    }
+    hasMore = !!res.data.has_more;
+    startCursor = res.data.next_cursor;
+  }
+
   return { pages };
 }
 
-async function testAIConnection() {
-  const env = loadEnv();
-  const { AI_PROVIDER, AI_BASE_URL, AI_API_KEY, AI_MODEL } = env;
-  if (!AI_API_KEY) throw new Error('AI API Key not configured');
-  
+async function testAIConnection(settings) {
+  const store = settings || loadStore();
+  const { aiProvider, aiBaseUrl, aiApiKey, aiModel } = store;
+  if (!aiApiKey) throw new Error('AI API Key not configured');
+
   let headers = { 'Content-Type': 'application/json' };
-  if (AI_PROVIDER === 'anthropic') {
-    headers['x-api-key'] = AI_API_KEY;
+  if (aiProvider === 'anthropic') {
+    headers['x-api-key'] = aiApiKey;
     headers['anthropic-version'] = '2023-06-01';
   } else {
-    headers['Authorization'] = `Bearer ${AI_API_KEY}`;
+    headers['Authorization'] = `Bearer ${aiApiKey}`;
   }
-  
-  const baseUrl = AI_BASE_URL || 'https://api.openai.com/v1';
-  const isAnthropic = AI_PROVIDER === 'anthropic';
-  
+
+  const baseUrl = aiBaseUrl || 'https://api.openai.com/v1';
+  const isAnthropic = aiProvider === 'anthropic';
+
   const payload = isAnthropic
-    ? { messages: [{ role: 'user', content: 'Hi' }], model: AI_MODEL || 'claude-haiku-4-20250514', max_tokens: 10 }
-    : { messages: [{ role: 'user', content: 'Hi' }], model: AI_MODEL || 'gpt-4o-mini', max_tokens: 10 };
-  
+    ? { messages: [{ role: 'user', content: 'Hi' }], model: aiModel || 'claude-haiku-4-20250514', max_tokens: 10 }
+    : { messages: [{ role: 'user', content: 'Hi' }], model: aiModel || 'gpt-4o-mini', max_tokens: 10 };
+
   const endpoint = isAnthropic ? '/messages' : '/chat/completions';
   const res = await axios.post(`${baseUrl}${endpoint}`, payload, { headers, timeout: 15000 });
-  return { success: true, model: res.data.model || AI_MODEL };
+  return { success: true, model: res.data.model || aiModel };
 }
 
 module.exports = { getAll, update, testNotionConnection, getNotionPages, testAIConnection };
