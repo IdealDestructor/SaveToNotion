@@ -169,7 +169,7 @@ function parseMarkdownToBlocks(markdown) {
     }
     if (inCode) { codeBuf.push(line); continue; }
 
-    if (line.startsWith('#### ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_4', heading_4: { rich_text: richText(line.slice(5)) } }); }
+    if (line.startsWith('#### ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_3', heading_3: { rich_text: richText(line.slice(5)) } }); }
     else if (line.startsWith('### ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_3', heading_3: { rich_text: richText(line.slice(4)) } }); }
     else if (line.startsWith('## ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_2', heading_2: { rich_text: richText(line.slice(3)) } }); }
     else if (line.startsWith('# ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_1', heading_1: { rich_text: richText(line.slice(2)) } }); }
@@ -184,12 +184,12 @@ function parseMarkdownToBlocks(markdown) {
   return blocks;
 }
 
-async function postWithRetry(url, body, headers, attempts, step) {
+async function requestWithRetry(method, url, body, headers, attempts, step) {
   attempts = attempts || 4;
   let lastErr;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await axios.post(url, body, { headers });
+      return await axios({ method, url, data: body, headers });
     } catch (err) {
       lastErr = err;
       const status = err.response && err.response.status;
@@ -202,6 +202,14 @@ async function postWithRetry(url, body, headers, attempts, step) {
     }
   }
   throw enhancedErr(lastErr, step);
+}
+
+function postWithRetry(url, body, headers, attempts, step) {
+  return requestWithRetry('post', url, body, headers, attempts, step);
+}
+
+function patchWithRetry(url, body, headers, attempts, step) {
+  return requestWithRetry('patch', url, body, headers, attempts, step);
 }
 
 function enhancedErr(err, step) {
@@ -251,7 +259,7 @@ async function saveToNotion(processedContent, title, settings, parentId, note) {
   const headers = {
     Authorization: `Bearer ${notionApiKey}`,
     'Content-Type': 'application/json',
-    'Notion-Version': settings.notionVersion || '2022-06-28',
+    'Notion-Version': settingsService.NOTION_VERSION,
   };
 
   const notionContent = processedContent + (note ? `\n\n> 💡 备注: ${note}` : '');
@@ -272,11 +280,11 @@ async function saveToNotion(processedContent, title, settings, parentId, note) {
   const pageId = createRes.data && createRes.data.id;
   if (!pageId) throw new Error('创建 Notion 页面失败: 响应中缺少 page id');
 
-  // Append content blocks in batches of 100 (Notion limit)
+  // Append content blocks in batches of 100 (Notion limit). Endpoint requires PATCH.
   for (let i = 0; i < blocks.length; i += 100) {
     const batch = blocks.slice(i, i + 100);
     if (!batch.length) continue;
-    await postWithRetry(
+    await patchWithRetry(
       `https://api.notion.com/v1/blocks/${pageId}/children`,
       { children: batch },
       headers,

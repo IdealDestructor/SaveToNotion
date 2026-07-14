@@ -18,8 +18,8 @@
     "markdown",
     "ai"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "IdealDestructor",
+  "license": "MIT",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/IdealDestructor/savetonotion/issues"

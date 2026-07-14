@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SaveToNotion · Extract Webpage to Notion</title>
+  <title>Save to Notion · Extract Webpage to Notion</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 46 46'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='46' y2='46'%3E%3Cstop stop-color='%236366f1'/%3E%3Cstop offset='1' stop-color='%23a855f7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='46' height='46' rx='13' fill='url(%23g)'/%3E%3Cg transform='translate(11,11)'%3E%3Cpath d='M2 21l21-9L2 3v7l15 2-15 2z' fill='%23fff'/%3E%3C/g%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/styles.css">
 </head>
@@ -32,18 +32,22 @@
           </svg>
         </span>
         <span class="brand-text">
-          <span class="brand-name">SaveToNotion</span>
+          <span class="brand-name">Save to Notion</span>
         </span>
       </a>
 
       <nav class="tabs">
         <button class="tab-btn active" data-tab="extract">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          提取网页
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-7h6v7"/></svg>
+          首页
         </button>
         <button class="tab-btn" data-tab="settings">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           设置
+        </button>
+        <button class="tab-btn" data-tab="about">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+          关于
         </button>
       </nav>
     </div>
@@ -58,9 +62,6 @@
       </div>
 
       <div class="card card-feature">
-        <div class="card-title">提取网页</div>
-        <div class="card-desc">支持自定义保存位置与提示词。</div>
-
         <div class="form-group">
           <label for="extract-url">网页链接</label>
           <div class="input-wrap">
@@ -69,18 +70,26 @@
           </div>
         </div>
 
-        <div class="form-row">
-          <div class="form-group">
-            <label for="parent-search">保存目标 <span class="hint">必选，需先在 Notion 中授权页面给集成</span></label>
-            <input type="text" id="parent-search" placeholder="搜索 Notion 页面..." oninput="onParentSearch()" onfocus="loadNotionPages()" />
-            <select id="parent-select" style="margin-top:8px">
-              <option value="">请选择目标页面...</option>
-            </select>
+        <div class="form-group">
+          <label>保存目标 <span class="hint">必选；需先在 Notion 中授权页面给集成</span></label>
+          <div class="cascader" id="parent-cascader">
+            <button type="button" class="cascader-trigger" id="cascader-trigger" aria-haspopup="listbox" aria-expanded="false">
+              <span class="cascader-placeholder" id="cascader-label">请选择 Notion 页面</span>
+              <svg class="cascader-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="cascader-panel" id="cascader-panel" hidden>
+              <input type="text" class="cascader-search" id="parent-search" placeholder="搜索页面..." autocomplete="off" />
+              <div class="cascader-menus" id="cascader-menus" role="listbox"></div>
+              <div class="cascader-footer">
+                <span class="cascader-hint" id="cascader-hint">点击页面可选中；有子页面时向右展开</span>
+                <div class="cascader-footer-actions">
+                  <button type="button" class="btn btn-secondary btn-sm" id="cascader-refresh" title="刷新一级目录">刷新目录</button>
+                  <button type="button" class="btn btn-primary btn-sm" id="cascader-confirm" disabled>确认选择</button>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="extract-note">备注 <span class="hint">可选</span></label>
-            <input type="text" id="extract-note" placeholder="添加一条简短备注" />
-          </div>
+          <input type="hidden" id="parent-select" value="" />
         </div>
 
         <div class="form-group">
@@ -98,8 +107,8 @@
             导出 Markdown
           </button>
           <button class="btn btn-primary" id="btn-extract" onclick="doExtract()">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            提取并保存
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+            保存到 Notion
           </button>
         </div>
 
@@ -138,11 +147,6 @@
             <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             <input type="password" id="notion-key" placeholder="nt_xxxxx" />
           </div>
-        </div>
-
-        <div class="form-group">
-          <label for="notion-version">Notion API Version</label>
-          <input type="text" id="notion-version" value="2022-06-28" />
         </div>
 
         <div class="btn-group">
@@ -198,19 +202,56 @@
         </div>
       </div>
 
-      <div class="btn-group">
-        <button class="btn btn-primary" id="btn-save-settings" onclick="saveSettings()">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          保存设置
-        </button>
+      <div class="status" id="settings-status"></div>
+    </section>
+
+    <!-- About Tab -->
+    <section class="tab-panel" id="panel-about">
+      <div class="about-hero">
+        <h1 class="about-title">关于 Save to Notion</h1>
+        <p class="about-lead">一键提取网页内容，经 AI 整理后保存到 Notion，或导出为 Markdown。</p>
       </div>
 
-      <div class="status" id="settings-status"></div>
+      <div class="card">
+        <div class="card-title">项目说明</div>
+        <ul class="about-list">
+          <li>粘贴网页链接，自动抓取正文并用 AI 整理为结构化 Markdown</li>
+          <li>支持保存到 Notion 指定页面，或直接导出 / 复制 Markdown</li>
+          <li>兼容 OpenAI 与 Anthropic（Claude）接口，密钥保存在浏览器本地</li>
+          <li>目标页面支持级联选择与搜索，配置修改后自动保存</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-title">作者与仓库</div>
+        <div class="card-desc">开源项目，欢迎 Star、提 Issue 与 PR。</div>
+        <div class="about-links">
+          <a class="about-link" href="https://github.com/IdealDestructor" target="_blank" rel="noreferrer">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.52 2.87 8.35 6.84 9.71.5.1.68-.22.68-.48 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.55-1.14-4.55-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.7 0 0 .84-.27 2.75 1.05A9.3 9.3 0 0 1 12 6.8c.85 0 1.71.12 2.51.35 1.9-1.32 2.74-1.05 2.74-1.05.55 1.4.2 2.44.1 2.7.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .26.18.59.69.48A10.04 10.04 0 0 0 22 12.26C22 6.58 17.52 2 12 2z"/></svg>
+            IdealDestructor
+          </a>
+          <a class="about-link" href="https://github.com/IdealDestructor/savetonotion" target="_blank" rel="noreferrer">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+            项目仓库
+          </a>
+          <a class="about-link" href="https://github.com/IdealDestructor/savetonotion/issues" target="_blank" rel="noreferrer">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+            问题反馈
+          </a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">开源协议</div>
+        <div class="card-desc">本项目采用 <strong>MIT License</strong> 发布。Copyright © 2026 IdealDestructor。</div>
+        <p class="about-license-note">你可以自由使用、修改与分发本软件，但需保留版权声明与协议文本。软件按「原样」提供，作者不承担任何明示或暗示的担保责任。</p>
+        <a class="link" href="https://github.com/IdealDestructor/savetonotion/blob/main/LICENSE" target="_blank" rel="noreferrer">查看完整 LICENSE →</a>
+      </div>
     </section>
   </main>
 
   <footer class="footer">
-    <span class="footer-brand">SaveToNotion</span> · 把网页优雅地搬进 Notion
+    <span class="footer-brand">Save to Notion</span> · 把网页优雅地搬进 Notion
   </footer>
 
   <!-- Loading Overlay -->

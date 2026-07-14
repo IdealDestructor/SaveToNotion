@@ -32,7 +32,7 @@ router.post('/test-ai', async (req, res) => {
 
 router.post('/notion-pages', async (req, res) => {
   try {
-    const pages = await settingsService.getNotionPages(req.body, req.body.query);
+    const pages = await settingsService.getNotionPages(req.body, req.body.query, req.body.parentId);
     res.json(pages);
   } catch (err) {
     res.status(500).json({ error: err.message });

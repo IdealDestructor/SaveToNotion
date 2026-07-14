@@ -4,9 +4,10 @@ const axios = require('axios');
 
 const STORE_PATH = path.join(__dirname, '..', '..', 'data', 'settings.json');
 
+const NOTION_VERSION = '2022-06-28';
+
 const DEFAULTS = {
   notionApiKey: '',
-  notionVersion: '2022-06-28',
   aiProvider: 'openai',
   aiModel: 'gpt-4o',
   aiBaseUrl: 'https://api.openai.com/v1',
@@ -35,7 +36,6 @@ function getAll() {
 async function update(updates) {
   const store = loadStore();
   if (updates.notionApiKey !== undefined) store.notionApiKey = updates.notionApiKey;
-  if (updates.notionVersion !== undefined) store.notionVersion = updates.notionVersion;
   if (updates.aiProvider !== undefined) store.aiProvider = updates.aiProvider;
   if (updates.aiModel !== undefined) store.aiModel = updates.aiModel;
   if (updates.aiBaseUrl !== undefined) store.aiBaseUrl = updates.aiBaseUrl;
@@ -51,7 +51,7 @@ function getNotionHeaders(settings) {
   return {
     Authorization: `Bearer ${apiKey}`,
     'Content-Type': 'application/json',
-    'Notion-Version': store.notionVersion || '2022-06-28',
+    'Notion-Version': NOTION_VERSION,
   };
 }
 
@@ -62,28 +62,81 @@ async function testNotionConnection(settings) {
 
 function extractPageTitle(page) {
   const props = page.properties || {};
-  // Prefer the property whose type is 'title' (name varies per page)
+  // Prefer the property whose type is 'title' (name varies per page / database)
   for (const key of Object.keys(props)) {
     const prop = props[key];
-    if (prop && prop.type === 'title' && Array.isArray(prop.title) && prop.title.length) {
-      const text = prop.title.map(t => t.plain_text || '').join('');
+    if (prop && prop.type === 'title' && Array.isArray(prop.title)) {
+      const text = prop.title.map(t => t.plain_text || '').join('').trim();
       if (text) return text;
     }
   }
-  // Fallbacks for common property names
-  for (const name of ['title', 'Title', 'name', 'Name']) {
-    const arr = props[name] && props[name].title;
-    if (Array.isArray(arr) && arr.length) {
-      const text = arr.map(t => t.plain_text || '').join('');
-      if (text) return text;
-    }
-  }
+  // Fallback: derive from Notion URL slug (.../My-Page-Title-<32hex>)
+  const fromUrl = titleFromNotionUrl(page.url);
+  if (fromUrl) return fromUrl;
   return 'Untitled';
 }
 
-async function getNotionPages(settings, query) {
+function titleFromNotionUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  try {
+    const path = new URL(url).pathname.replace(/\/$/, '');
+    const segment = path.split('/').pop() || '';
+    const match = segment.match(/^(.*)-([0-9a-f]{32})$/i);
+    if (!match || !match[1]) return '';
+    return decodeURIComponent(match[1].replace(/-/g, ' ')).trim();
+  } catch {
+    return '';
+  }
+}
+
+function isDatabaseRow(parent) {
+  const type = parent && parent.type;
+  return type === 'database_id' || type === 'data_source_id';
+}
+
+function normalizeNotionId(id) {
+  if (!id) return null;
+  const hex = String(id).replace(/-/g, '').toLowerCase();
+  if (!/^[0-9a-f]{32}$/.test(hex)) return String(id).trim();
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+async function getNotionPages(settings, query, parentId) {
   const headers = getNotionHeaders(settings);
+  parentId = normalizeNotionId(parentId);
+
+  // Children of a specific page — list via blocks API
+  if (parentId) {
+    const pages = [];
+    let startCursor;
+    let hasMore = true;
+    let guard = 0;
+    while (hasMore && guard < 10) {
+      guard++;
+      const params = { page_size: 100 };
+      if (startCursor) params.start_cursor = startCursor;
+      const res = await axios.get(`https://api.notion.com/v1/blocks/${parentId}/children`, {
+        headers,
+        params,
+      });
+      const results = (res.data && res.data.results) || [];
+      for (const block of results) {
+        if (block.archived || block.in_trash) continue;
+        if (block.type === 'child_page') {
+          const title = ((block.child_page && block.child_page.title) || '').trim() || 'Untitled';
+          pages.push({ id: normalizeNotionId(block.id), title, parentId });
+        }
+      }
+      hasMore = !!res.data.has_more;
+      startCursor = res.data.next_cursor;
+    }
+    // Keep Notion document order from blocks API (do not re-sort by title)
+    return { pages };
+  }
+
+  // Search or root listing via search API
   const pages = [];
+  const byId = {};
   let startCursor;
   let hasMore = true;
   let guard = 0;
@@ -97,15 +150,55 @@ async function getNotionPages(settings, query) {
     const res = await axios.post('https://api.notion.com/v1/search', body, { headers });
     const results = (res.data && res.data.results) || [];
     for (const page of results) {
-      const parent = page.parent;
-      const parentId = parent && parent.type === 'page_id' ? parent.page_id : null;
-      pages.push({ id: page.id, title: extractPageTitle(page), parentId });
+      if (page.archived || page.in_trash) continue;
+      const parent = page.parent || {};
+      // Database / data-source rows are not directory pages
+      if (!query && isDatabaseRow(parent)) continue;
+
+      let pageParentId = null;
+      if (parent.type === 'page_id') pageParentId = normalizeNotionId(parent.page_id);
+      else if (parent.type === 'block_id') pageParentId = normalizeNotionId(parent.block_id);
+
+      const id = normalizeNotionId(page.id);
+      const item = {
+        id,
+        title: extractPageTitle(page),
+        parentId: pageParentId,
+        parentType: parent.type || null,
+      };
+      pages.push(item);
+      byId[id] = item;
     }
     hasMore = !!res.data.has_more;
     startCursor = res.data.next_cursor;
   }
 
-  return { pages };
+  // Search mode: return flat matches (still skip empty untitled clutter when possible)
+  if (query) {
+    const filtered = pages.filter((p) => p.title && p.title !== 'Untitled');
+    const list = filtered.length ? filtered : pages;
+    list.sort((a, b) => a.title.localeCompare(b.title, 'zh'));
+    return { pages: list };
+  }
+
+  // Root mode: only workspace top-level pages.
+  // If a mid-level page was shared without its parent, use that page as an entry
+  // point — but never promote a page whose parent is already in the accessible set.
+  const workspaceRoots = pages.filter((p) => p.parentType === 'workspace');
+  let roots = workspaceRoots;
+
+  if (!roots.length) {
+    roots = pages.filter((p) => {
+      if (p.parentType !== 'page_id' && p.parentType !== 'block_id') return false;
+      if (!p.parentId) return false;
+      return !byId[p.parentId];
+    });
+  }
+
+  const named = roots.filter((p) => p.title && p.title !== 'Untitled');
+  const list = named.length ? named : roots;
+  list.sort((a, b) => a.title.localeCompare(b.title, 'zh'));
+  return { pages: list };
 }
 
 async function testAIConnection(settings) {
@@ -133,4 +226,4 @@ async function testAIConnection(settings) {
   return { success: true, model: res.data.model || aiModel };
 }
 
-module.exports = { getAll, update, testNotionConnection, getNotionPages, testAIConnection };
+module.exports = { getAll, update, testNotionConnection, getNotionPages, testAIConnection, NOTION_VERSION };

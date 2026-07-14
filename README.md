@@ -29,7 +29,7 @@ npm install
 
 ### 配置
 
-配置（Notion / AI 密钥等）保存在**浏览器的 localStorage** 中，点击「设置」页的「保存设置」即生效，无需服务端文件，也不会随仓库提交。
+配置（Notion / AI 密钥等）保存在**浏览器的 localStorage** 中，在「设置」页修改后会自动保存，无需服务端文件，也不会随仓库提交。
 
 如需手动重置，在浏览器控制台执行 `localStorage.removeItem('savetonotion-settings')` 即可。
 
@@ -56,7 +56,7 @@ npm run dev
 提取并保存网页到 Notion。
 
 ```json
-{ "url": "https://example.com", "parentId": "", "note": "备注", "promptOverride": "" }
+{ "url": "https://example.com", "parentId": "", "promptOverride": "" }
 ```
 
 ### `POST /api/extract/preview`
@@ -72,7 +72,7 @@ npm run dev
 获取 Notion 页面列表（树状，支持 `query` 搜索）。
 
 ```json
-{ "notionApiKey": "...", "notionVersion": "2022-06-28", "query": "" }
+{ "notionApiKey": "...", "query": "", "parentId": "" }
 ```
 
 ### `POST /api/settings/test-notion`
