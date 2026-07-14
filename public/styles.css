@@ -882,7 +882,8 @@ select {
     align-items: center;
     justify-content: center;
     gap: 10px;
-    min-height: 140px;
+    min-height: 200px;
+    min-width: 200px;
     color: var(--text-secondary);
     font-size: 13px;
 }
