@@ -2,13 +2,21 @@
 
 一键提取网页内容，经 AI 整理后保存到 Notion。
 
+## 在线预览
+
+[notion.idealx.top](https://notion.idealx.top)
+
 ## 功能
 
 - 输入 URL，自动抓取网页正文
 - 支持 OpenAI / Anthropic（Claude）两种 AI 提供商
 - AI 自动整理为结构清晰的 Markdown 笔记
+- 保留图片、视频（含 YouTube / Bilibili 等外链）与 PDF，并尽量保持原文相对位置
+- 支持「纯文本（无图）」模式，提取前可选
+- 保存成功后提供可跳转的 Notion 页面链接
 - 一键保存到 Notion，支持选择目标页面
-- 预览功能，确认后再保存
+- 预览功能，确认后再保存（预览中可看到图片）
+- 中英双语与深浅色主题切换
 - 自定义 AI 提示词
 
 ## 快速开始

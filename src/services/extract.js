@@ -3,7 +3,205 @@ const cheerio = require('cheerio');
 const { NodeHtmlMarkdown } = require('node-html-markdown');
 const settingsService = require('./settings');
 
-async function fetchUrlContent(url) {
+const MEDIA_LINE_RE = /^\s*!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)\s*$/;
+const PDF_LINK_LINE_RE = /^\s*\[([^\]]*)\]\(([^)\s]+\.pdf(?:\?[^)\s]*)?)(?:\s+"[^"]*")?\)\s*$/i;
+const VIDEO_URL_RE = /\.(mp4|webm|ogg|mov)(?:\?|$)/i;
+const PDF_URL_RE = /\.pdf(?:\?|$)/i;
+const STREAM_HOST_RE = /(?:youtube\.com|youtu\.be|vimeo\.com|bilibili\.com|player\.bilibili\.com)/i;
+const MEDIA_MD_PATTERN = '!\\[([^\\]]*)\\]\\(([^)\\s]+)(?:\\s+"[^"]*")?\\)';
+
+function absolutizeUrl(href, base) {
+  if (!href) return null;
+  const trimmed = String(href).trim();
+  if (!trimmed || trimmed.startsWith('data:') || trimmed.startsWith('blob:') || trimmed.startsWith('javascript:')) {
+    return null;
+  }
+  try {
+    return new URL(trimmed, base).href;
+  } catch {
+    return null;
+  }
+}
+
+function isHttpUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function pickMediaSrc($el) {
+  const candidates = [
+    $el.attr('src'),
+    $el.attr('data-src'),
+    $el.attr('data-original'),
+    $el.attr('data-lazy-src'),
+    $el.attr('data-actualsrc'),
+    $el.attr('data-url'),
+  ];
+  const srcset = $el.attr('srcset') || $el.attr('data-srcset');
+  if (srcset) {
+    const first = String(srcset).split(',')[0].trim().split(/\s+/)[0];
+    candidates.push(first);
+  }
+  for (const candidate of candidates) {
+    if (candidate && !String(candidate).startsWith('data:')) return candidate;
+  }
+  return null;
+}
+
+function prepareMediaInHtml($, pageUrl, options) {
+  options = options || {};
+  if (options.textOnly) {
+    $('iframe, img, video, picture, source, figure').remove();
+    $('a').each((_, el) => {
+      const $el = $(el);
+      const abs = absolutizeUrl($el.attr('href'), pageUrl);
+      if (abs) $el.attr('href', abs);
+    });
+    return;
+  }
+
+  $('iframe').each((_, el) => {
+    const abs = absolutizeUrl($(el).attr('src'), pageUrl);
+    if (abs && STREAM_HOST_RE.test(abs)) {
+      $(el).replaceWith(`<p>![video](${abs})</p>`);
+    }
+  });
+
+  $('img').each((_, el) => {
+    const $el = $(el);
+    const abs = absolutizeUrl(pickMediaSrc($el), pageUrl);
+    if (abs) {
+      const alt = ($el.attr('alt') || '').replace(/[\[\]]/g, '');
+      // Keep images as block-level markdown so relative order survives conversion.
+      $el.replaceWith(`<p>![${alt}](${abs})</p>`);
+    } else {
+      $el.remove();
+    }
+  });
+
+  $('video').each((_, el) => {
+    const $el = $(el);
+    const raw = $el.attr('src') || $el.find('source').first().attr('src');
+    const abs = absolutizeUrl(raw, pageUrl);
+    if (abs) $el.replaceWith(`<p>![video](${abs})</p>`);
+    else $el.remove();
+  });
+
+  $('a').each((_, el) => {
+    const $el = $(el);
+    const abs = absolutizeUrl($el.attr('href'), pageUrl);
+    if (abs) $el.attr('href', abs);
+  });
+}
+
+function stripMediaMarkdown(markdown) {
+  if (!markdown) return '';
+  return markdown
+    .replace(new RegExp(MEDIA_MD_PATTERN, 'g'), '')
+    .replace(/^\s*\[[^\]]*\]\(([^)\s]+\.pdf(?:\?[^)\s]*)?)(?:\s+"[^"]*")?\)\s*$/gim, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function normalizeCtx(text) {
+  return String(text || '')
+    .replace(/⟦MEDIA_\d+⟧/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function findInsertPos(haystack, needle, placeAfter) {
+  const n = normalizeCtx(needle);
+  if (!n || n.length < 10) return -1;
+  const candidates = [n];
+  if (n.length > 24) candidates.push(n.slice(-24), n.slice(0, 24));
+  for (const c of candidates) {
+    if (c.length < 10) continue;
+    const idx = haystack.indexOf(c);
+    if (idx >= 0) return placeAfter ? idx + c.length : idx;
+    const softHay = haystack.replace(/\s+/g, ' ');
+    const softIdx = softHay.indexOf(c);
+    if (softIdx >= 0) {
+      // Map approximate position back to original loosely by ratio
+      const ratio = softHay.length ? softIdx / softHay.length : 0;
+      return Math.min(haystack.length, Math.floor(haystack.length * ratio) + (placeAfter ? c.length : 0));
+    }
+  }
+  return -1;
+}
+
+function protectMedia(markdown) {
+  const media = [];
+  const re = new RegExp(MEDIA_MD_PATTERN, 'g');
+  let match;
+  const parts = [];
+  let last = 0;
+  while ((match = re.exec(markdown)) !== null) {
+    const idx = media.length;
+    media.push({
+      md: match[0],
+      beforeCtx: markdown.slice(Math.max(0, match.index - 160), match.index),
+      afterCtx: markdown.slice(match.index + match[0].length, match.index + match[0].length + 160),
+    });
+    parts.push(markdown.slice(last, match.index));
+    parts.push(`\n\n⟦MEDIA_${idx}⟧\n\n`);
+    last = match.index + match[0].length;
+  }
+  parts.push(markdown.slice(last));
+  return {
+    text: parts.join('').replace(/\n{3,}/g, '\n\n').trim(),
+    media,
+  };
+}
+
+function restoreMedia(processed, media) {
+  if (!media || !media.length) return (processed || '').trim();
+  let out = processed || '';
+  const used = new Set();
+
+  out = out.replace(/⟦\s*MEDIA[_\s-]*(\d+)\s*⟧/gi, (_, n) => {
+    const i = Number(n);
+    if (media[i]) {
+      used.add(i);
+      return `\n\n${media[i].md}\n\n`;
+    }
+    return '';
+  });
+
+  for (let i = 0; i < media.length; i++) {
+    if (used.has(i)) continue;
+    const item = media[i];
+    let pos = findInsertPos(out, item.beforeCtx, true);
+    if (pos < 0) pos = findInsertPos(out, item.afterCtx, false);
+
+    if (pos < 0 && i > 0) {
+      const prevMd = media[i - 1].md;
+      const prevPos = out.indexOf(prevMd);
+      if (prevPos >= 0) pos = prevPos + prevMd.length;
+    }
+    if (pos < 0 && i < media.length - 1) {
+      const nextMd = media[i + 1].md;
+      const nextPos = out.indexOf(nextMd);
+      if (nextPos >= 0) pos = nextPos;
+    }
+
+    if (pos >= 0) {
+      out = `${out.slice(0, pos)}\n\n${item.md}\n\n${out.slice(pos)}`;
+    } else {
+      out = `${out.trim()}\n\n${item.md}\n\n`;
+    }
+    used.add(i);
+  }
+
+  return out.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+async function fetchUrlContent(url, options) {
+  options = options || {};
   let lastErr;
   for (let i = 0; i < 3; i++) {
     try {
@@ -28,6 +226,7 @@ async function fetchUrlContent(url) {
   const res = response;
   
   const $ = cheerio.load(res.data);
+  prepareMediaInHtml($, url, options);
   $('script, style, noscript, iframe, nav, footer, header, .sidebar, .nav, .menu, .advertisement, .ads, .comment').remove();
   
   const title = $('title').text().trim() 
@@ -41,19 +240,37 @@ async function fetchUrlContent(url) {
   }
   if (!mainContent) mainContent = $('body').html();
   
-  const md = NodeHtmlMarkdown.translate(mainContent);
+  let md = NodeHtmlMarkdown.translate(mainContent || '');
+  md = md.replace(/\n{3,}/g, '\n\n').trim();
+  if (options.textOnly) md = stripMediaMarkdown(md);
   
   return {
     title,
-    content: md.replace(/\n{3,}/g, '\n\n').trim(),
+    content: md,
     url,
     author: $('meta[name="author"]').attr('content') || '',
   };
 }
 
-async function processWithAI(rawContent, settings, promptOverride) {
+async function processWithAI(rawContent, settings, promptOverride, options) {
+  options = options || {};
+  const textOnly = !!options.textOnly;
   const { aiProvider, aiBaseUrl, aiApiKey, aiModel } = settings;
   if (!aiApiKey) throw new Error('AI API Key not configured');
+
+  let contentForAI = rawContent.content;
+  let media = [];
+  if (textOnly) {
+    contentForAI = stripMediaMarkdown(rawContent.content);
+  } else {
+    const protectedContent = protectMedia(rawContent.content);
+    contentForAI = protectedContent.text;
+    media = protectedContent.media;
+  }
+
+  const mediaRule = textOnly
+    ? '6. 纯文本模式：不要输出任何图片、视频、PDF 或媒体链接'
+    : `6. 正文中的 ⟦MEDIA_N⟧ 是媒体占位符，必须原样保留在对应位置（可随段落一起调整，但禁止删除、合并、改写编号或改成图片链接）。不要自行发明媒体 URL`;
   
   const defaultPrompt = `你是一个专业的内容整理助手。请将以下网页内容整理成结构清晰、格式优美的 Notion 笔记。
 
@@ -63,13 +280,14 @@ async function processWithAI(rawContent, settings, promptOverride) {
 3. 去除广告、导航栏等无关内容
 4. 如果原文有作者信息，在开头注明
 5. 在文末添加原文链接
-6. 输出纯 Markdown 格式，不要添加额外的解释文字`;
+${mediaRule}
+7. 输出纯 Markdown 格式，不要添加额外的解释文字`;
 
   const prompt = promptOverride || (settings.extraPrompt || '') + '\n\n' + defaultPrompt;
   
   const messages = [
     { role: 'system', content: prompt },
-    { role: 'user', content: rawContent.content },
+    { role: 'user', content: contentForAI },
   ];
   
   let headers = { 'Content-Type': 'application/json' };
@@ -90,8 +308,12 @@ async function processWithAI(rawContent, settings, promptOverride) {
   const endpoint = isAnthropic ? '/messages' : '/chat/completions';
   const res = await axios.post(`${baseUrl}${endpoint}`, payload, { headers, timeout: 120000 });
   
-  if (isAnthropic) return res.data.content?.[0]?.text || '';
-  return res.data.choices?.[0]?.message?.content || '';
+  const text = isAnthropic
+    ? (res.data.content?.[0]?.text || '')
+    : (res.data.choices?.[0]?.message?.content || '');
+
+  if (textOnly) return stripMediaMarkdown(text);
+  return restoreMedia(text, media);
 }
 
 const CODE_LANG_MAP = {
@@ -130,6 +352,86 @@ function richText(text, max) {
   return chunkText(text, max).map(t => ({ type: 'text', text: { content: t } }));
 }
 
+function mediaBlock(url, caption, forcedType) {
+  if (!isHttpUrl(url)) return null;
+  const captionText = caption && caption !== 'video' ? caption : '';
+  const captionRt = captionText ? richText(captionText) : [];
+
+  let type = forcedType;
+  if (!type) {
+    if (STREAM_HOST_RE.test(url) || VIDEO_URL_RE.test(url) || caption === 'video') type = 'video';
+    else if (PDF_URL_RE.test(url)) type = 'pdf';
+    else type = 'image';
+  }
+
+  if (type === 'video') {
+    return {
+      object: 'block',
+      type: 'video',
+      video: { type: 'external', external: { url }, caption: captionRt },
+    };
+  }
+  if (type === 'pdf') {
+    return {
+      object: 'block',
+      type: 'pdf',
+      pdf: { type: 'external', external: { url } },
+    };
+  }
+  return {
+    object: 'block',
+    type: 'image',
+    image: { type: 'external', external: { url }, caption: captionRt },
+  };
+}
+
+function splitInlineMedia(text) {
+  const parts = [];
+  let lastIndex = 0;
+  const re = new RegExp(MEDIA_MD_PATTERN, 'g');
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ kind: 'text', value: text.slice(lastIndex, match.index) });
+    }
+    parts.push({ kind: 'media', alt: match[1], url: match[2] });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ kind: 'text', value: text.slice(lastIndex) });
+  }
+  return parts.length ? parts : [{ kind: 'text', value: text }];
+}
+
+function pushTextBlocks(blocks, text) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return;
+  const parts = splitInlineMedia(trimmed);
+  let textBuf = [];
+
+  function flushText() {
+    const joined = textBuf.join('').trim();
+    if (!joined) { textBuf = []; return; }
+    blocks.push({
+      object: 'block', type: 'paragraph',
+      paragraph: { rich_text: richText(joined) },
+    });
+    textBuf = [];
+  }
+
+  for (const part of parts) {
+    if (part.kind === 'media') {
+      flushText();
+      const block = mediaBlock(part.url, part.alt);
+      if (block) blocks.push(block);
+      else textBuf.push(`![${part.alt}](${part.url})`);
+    } else {
+      textBuf.push(part.value);
+    }
+  }
+  flushText();
+}
+
 function parseMarkdownToBlocks(markdown) {
   const blocks = [];
   const lines = markdown.split('\n');
@@ -140,13 +442,7 @@ function parseMarkdownToBlocks(markdown) {
 
   function flushParagraph() {
     if (currentParagraph.length > 0) {
-      const text = currentParagraph.join(' ');
-      if (text.trim()) {
-        blocks.push({
-          object: 'block', type: 'paragraph',
-          paragraph: { rich_text: richText(text.trim()) },
-        });
-      }
+      pushTextBlocks(blocks, currentParagraph.join(' '));
       currentParagraph = [];
     }
   }
@@ -168,6 +464,24 @@ function parseMarkdownToBlocks(markdown) {
       continue;
     }
     if (inCode) { codeBuf.push(line); continue; }
+
+    const mediaLine = line.match(MEDIA_LINE_RE);
+    if (mediaLine) {
+      flushParagraph();
+      const block = mediaBlock(mediaLine[2], mediaLine[1]);
+      if (block) blocks.push(block);
+      else pushTextBlocks(blocks, line);
+      continue;
+    }
+
+    const pdfLine = line.match(PDF_LINK_LINE_RE);
+    if (pdfLine) {
+      flushParagraph();
+      const block = mediaBlock(pdfLine[2], pdfLine[1], 'pdf');
+      if (block) blocks.push(block);
+      else pushTextBlocks(blocks, line);
+      continue;
+    }
 
     if (line.startsWith('#### ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_3', heading_3: { rich_text: richText(line.slice(5)) } }); }
     else if (line.startsWith('### ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_3', heading_3: { rich_text: richText(line.slice(4)) } }); }
@@ -293,15 +607,17 @@ async function saveToNotion(processedContent, title, settings, parentId, note) {
     );
   }
 
-  return { success: true, pageId };
+  const pageUrl = `https://www.notion.so/${String(pageId).replace(/-/g, '')}`;
+  return { success: true, pageId, pageUrl };
 }
 
-async function extractAndSave(url, parentId, note, promptOverride, settings) {
+async function extractAndSave(url, parentId, note, promptOverride, settings, options) {
   settings = settings || settingsService.getAll();
+  options = options || {};
   let rawContent;
   try {
     console.log(`Fetching URL: ${url}`);
-    rawContent = await fetchUrlContent(url);
+    rawContent = await fetchUrlContent(url, options);
   } catch (err) {
     throw new Error('抓取网页失败: ' + err.message);
   }
@@ -309,7 +625,7 @@ async function extractAndSave(url, parentId, note, promptOverride, settings) {
   let processedContent;
   try {
     console.log('Processing with AI...');
-    processedContent = await processWithAI(rawContent, settings, promptOverride);
+    processedContent = await processWithAI(rawContent, settings, promptOverride, options);
   } catch (err) {
     throw new Error('AI 整理失败: ' + err.message);
   }
@@ -323,11 +639,12 @@ async function extractAndSave(url, parentId, note, promptOverride, settings) {
   }
 }
 
-async function preview(url, promptOverride, settings) {
+async function preview(url, promptOverride, settings, options) {
   settings = settings || settingsService.getAll();
-  const rawContent = await fetchUrlContent(url);
-  const processedContent = await processWithAI(rawContent, settings, promptOverride);
-  return { title: rawContent.title, url: rawContent.url, rawContent: rawContent.content, processedContent };
+  options = options || {};
+  const rawContent = await fetchUrlContent(url, options);
+  const processedContent = await processWithAI(rawContent, settings, promptOverride, options);
+  return { title: rawContent.title, url: rawContent.url, rawContent: rawContent.content, processedContent, textOnly: !!options.textOnly };
 }
 
 module.exports = { extractAndSave, preview };

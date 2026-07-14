@@ -1,6 +1,269 @@
 (function() {
   'use strict';
 
+  // --- i18n & theme ---
+  var LOCALE_KEY = 'savetonotion-locale';
+  var THEME_KEY = 'savetonotion-theme';
+  var I18N = {
+    zh: {
+      tabHome: '首页', tabSettings: '设置', tabAbout: '关于',
+      toggleTheme: '切换主题（系统 / 浅色 / 深色）',
+      themeSystem: '跟随系统',
+      themeLight: '浅色',
+      themeDark: '深色',
+      toggleLang: 'Switch to English',
+      heroTitleBefore: '把一个网页', heroTitleGrad: '变成一篇 Notion 笔记',
+      heroDesc: '粘贴链接，AI 自动提炼正文、整理为结构化 Markdown，可存入 Notion 或直接导出 .md 文件。',
+      labelUrl: '网页链接', phUrl: 'https://example.com/article',
+      labelTarget: '保存目标', hintTarget: '必选；需先在 Notion 中授权页面给集成',
+      selectPage: '请选择 Notion 页面', phSearchPages: '搜索页面...',
+      cascaderHint: '点击页面可选中；有子页面时向右展开',
+      refreshRoots: '刷新目录', confirmSelect: '确认选择',
+      labelPrompt: '自定义提示词', hintPrompt: '可选，覆盖默认 AI 指令',
+      phPrompt: '例如：用中文总结，保留所有小标题...',
+      optTextOnly: '无图模式',
+      optTextOnlyHint: '不抓取图片/视频，仅整理文字内容',
+      btnPreview: '预览', btnExportMd: '导出 Markdown', btnSave: '保存到 Notion',
+      previewTitle: '预览', previewDesc: 'AI 处理后的内容预览',
+      btnCopy: '复制', btnDownloadMd: '下载 Markdown',
+      settingsNotion: 'Notion 配置',
+      settingsNotionDesc: '在 Notion 的', settingsNotionDesc2: '页面创建集成并获取 API Key。',
+      settingsAi: 'AI 配置', settingsAiDesc: '选择 AI 提供商与模型，用于内容整理。',
+      labelProvider: 'AI 提供商', labelModel: '模型', btnTest: '测试连接',
+      settingsExtra: '额外提示词', settingsExtraDesc: '会追加到默认 AI 指令之前。',
+      labelExtraPrompt: '自定义提示词', phExtraPrompt: '例如：请用中文总结以下内容...',
+      aboutTitle: '关于 Save to Notion',
+      aboutLead: '一键提取网页内容，经 AI 整理后保存到 Notion，或导出为 Markdown。',
+      aboutProject: '项目说明',
+      aboutLi1: '粘贴网页链接，自动抓取正文并用 AI 整理为结构化 Markdown',
+      aboutLi2: '支持保存到 Notion 指定页面，或直接导出 / 复制 Markdown',
+      aboutLi3: '兼容 OpenAI 与 Anthropic（Claude）接口，密钥保存在浏览器本地',
+      aboutLi4: '目标页面支持级联选择与搜索，配置修改后自动保存',
+      aboutAuthor: '作者与仓库', aboutAuthorDesc: '开源项目，欢迎 Star、提 Issue 与 PR。',
+      aboutRepo: '项目仓库', aboutIssues: '问题反馈',
+      aboutLicense: '开源协议',
+      aboutLicenseDesc: '本项目采用 <strong>MIT License</strong> 发布。Copyright © 2026 IdealDestructor。',
+      aboutLicenseNote: '你可以自由使用、修改与分发本软件，但需保留版权声明与协议文本。软件按「原样」提供，作者不承担任何明示或暗示的担保责任。',
+      aboutLicenseLink: '查看完整 LICENSE →',
+      footerTagline: '把网页优雅地搬进 Notion', loading: '正在处理...',
+      requestFailed: '请求失败', processing: '正在处理...',
+      settingsSaved: '✅ 设置已自动保存',
+      testing: '正在测试...', notionOk: '✅ Notion 连接正常', aiOk: '✅ AI 连接正常',
+      justNow: '刚刚更新', minsAgo: '{n} 分钟前缓存', hoursAgo: '{n} 小时前缓存', daysAgo: '{n} 天前缓存',
+      cascaderHintExpand: '点击可选中；向右展开子页面 · {age}',
+      loadingRoots: '正在加载目录...', noPages: '暂无可用页面，请确认已授权 Notion 集成',
+      loadingChildren: '加载子页面...', noPagesShort: '暂无页面', noChildren: '无子页面',
+      loadingChildrenOf: '正在加载「{title}」的子页面…',
+      noChildrenConfirm: '「{title}」下暂无子页面，可直接确认选择',
+      childrenFail: '子页面加载失败: {msg}',
+      cacheExpired: '{age}（已过期，正在刷新…）',
+      cacheRefreshFail: '{age}（刷新失败，仍使用缓存）',
+      loadFail: '加载失败: {msg}', refreshingRoots: '正在刷新一级目录…',
+      refreshed: '已刷新 · {age}', refreshFail: '刷新失败: {msg}',
+      searching: '正在搜索…', searchMode: '搜索模式：点击结果即可选中',
+      searchEmpty: '未找到匹配页面', searchFail: '搜索失败', searchFailDetail: '搜索失败: {msg}',
+      noContent: '(无内容)', copied: '✅ 已复制到剪贴板', copyFail: '❌ 复制失败：{msg}',
+      mdDownloaded: '✅ Markdown 文件已下载：{name}',
+      needUrl: '请输入网页链接',
+      extractingMd: '正在提取并整理 Markdown...',
+      extracting: '正在提取并分析网页内容...',
+      previewDone: '✅ 预览完成 — 确认无误后点击“保存到 Notion”',
+      needParent: '请选择一个 Notion 目标页面（需在 Notion 中将页面授权给集成）',
+      extractingContent: '正在提取内容...',
+      savingNotion: '正在保存到 Notion...',
+      saveSuccess: '✅ 已成功保存到 Notion！标题: {title}',
+      openInNotion: '在 Notion 中打开 →',
+      emptyPreview: '(无内容)',
+    },
+    en: {
+      tabHome: 'Home', tabSettings: 'Settings', tabAbout: 'About',
+      toggleTheme: 'Cycle theme (System / Light / Dark)',
+      themeSystem: 'System',
+      themeLight: 'Light',
+      themeDark: 'Dark',
+      toggleLang: '切换到中文',
+      heroTitleBefore: 'Turn any webpage ', heroTitleGrad: 'into a Notion note',
+      heroDesc: 'Paste a URL. AI extracts the article into structured Markdown — save to Notion or export a .md file.',
+      labelUrl: 'Page URL', phUrl: 'https://example.com/article',
+      labelTarget: 'Save to', hintTarget: 'Required; share the Notion page with your integration first',
+      selectPage: 'Select a Notion page', phSearchPages: 'Search pages...',
+      cascaderHint: 'Click to select; expand right for child pages',
+      refreshRoots: 'Refresh', confirmSelect: 'Confirm',
+      labelPrompt: 'Custom prompt', hintPrompt: 'Optional; overrides the default AI instructions',
+      phPrompt: 'e.g. Summarize in English and keep all subheadings...',
+      optTextOnly: 'No media',
+      optTextOnlyHint: 'Skip images/videos and keep text only',
+      btnPreview: 'Preview', btnExportMd: 'Export Markdown', btnSave: 'Save to Notion',
+      previewTitle: 'Preview', previewDesc: 'AI-processed content preview',
+      btnCopy: 'Copy', btnDownloadMd: 'Download Markdown',
+      settingsNotion: 'Notion',
+      settingsNotionDesc: 'Create an integration on Notion', settingsNotionDesc2: 'and copy the API Key.',
+      settingsAi: 'AI', settingsAiDesc: 'Choose a provider and model for content refinement.',
+      labelProvider: 'Provider', labelModel: 'Model', btnTest: 'Test connection',
+      settingsExtra: 'Extra prompt', settingsExtraDesc: 'Prepended to the default AI instructions.',
+      labelExtraPrompt: 'Custom prompt', phExtraPrompt: 'e.g. Please summarize the following in Chinese...',
+      aboutTitle: 'About Save to Notion',
+      aboutLead: 'Extract webpages, refine with AI, save to Notion — or export Markdown.',
+      aboutProject: 'What it does',
+      aboutLi1: 'Paste a URL to fetch the article and turn it into structured Markdown with AI',
+      aboutLi2: 'Save to a chosen Notion page, or export / copy Markdown directly',
+      aboutLi3: 'Works with OpenAI and Anthropic (Claude); keys stay in local browser storage',
+      aboutLi4: 'Cascading page picker with search; settings auto-save on change',
+      aboutAuthor: 'Author & repo', aboutAuthorDesc: 'Open source — stars, issues, and PRs welcome.',
+      aboutRepo: 'Repository', aboutIssues: 'Issues',
+      aboutLicense: 'License',
+      aboutLicenseDesc: 'Released under the <strong>MIT License</strong>. Copyright © 2026 IdealDestructor.',
+      aboutLicenseNote: 'You may use, modify, and distribute this software with the copyright notice retained. Provided “as is”, without warranty of any kind.',
+      aboutLicenseLink: 'View full LICENSE →',
+      footerTagline: 'Move the web into Notion, elegantly', loading: 'Working...',
+      requestFailed: 'Request failed', processing: 'Working...',
+      settingsSaved: '✅ Settings saved',
+      testing: 'Testing...', notionOk: '✅ Notion connected', aiOk: '✅ AI connected',
+      justNow: 'Updated just now', minsAgo: 'Cached {n} min ago', hoursAgo: 'Cached {n} h ago', daysAgo: 'Cached {n} d ago',
+      cascaderHintExpand: 'Click to select; expand right for children · {age}',
+      loadingRoots: 'Loading pages...', noPages: 'No pages found — make sure the integration has access',
+      loadingChildren: 'Loading children...', noPagesShort: 'No pages', noChildren: 'No child pages',
+      loadingChildrenOf: 'Loading children of “{title}”…',
+      noChildrenConfirm: '“{title}” has no children — you can confirm selection',
+      childrenFail: 'Failed to load children: {msg}',
+      cacheExpired: '{age} (expired, refreshing…)',
+      cacheRefreshFail: '{age} (refresh failed, using cache)',
+      loadFail: 'Load failed: {msg}', refreshingRoots: 'Refreshing root pages…',
+      refreshed: 'Refreshed · {age}', refreshFail: 'Refresh failed: {msg}',
+      searching: 'Searching…', searchMode: 'Search mode: click a result to select',
+      searchEmpty: 'No matching pages', searchFail: 'Search failed', searchFailDetail: 'Search failed: {msg}',
+      noContent: '(empty)', copied: '✅ Copied to clipboard', copyFail: '❌ Copy failed: {msg}',
+      mdDownloaded: '✅ Markdown downloaded: {name}',
+      needUrl: 'Please enter a page URL',
+      extractingMd: 'Extracting and refining Markdown...',
+      extracting: 'Extracting and analyzing the page...',
+      previewDone: '✅ Preview ready — click “Save to Notion” when it looks good',
+      needParent: 'Select a Notion target page (share it with your integration first)',
+      extractingContent: 'Extracting content...',
+      savingNotion: 'Saving to Notion...',
+      saveSuccess: '✅ Saved to Notion! Title: {title}',
+      openInNotion: 'Open in Notion →',
+      emptyPreview: '(empty)',
+    }
+  };
+
+  var currentLocale = 'zh';
+  var currentThemePref = 'system';
+  var currentTheme = 'light';
+  var systemThemeMql = null;
+
+  function t(key, vars) {
+    var dict = I18N[currentLocale] || I18N.zh;
+    var str = (dict && dict[key]) || (I18N.zh && I18N.zh[key]) || key;
+    if (vars) {
+      Object.keys(vars).forEach(function (k) {
+        str = str.replace(new RegExp('\\{' + k + '\\}', 'g'), String(vars[k]));
+      });
+    }
+    return str;
+  }
+
+  function detectLocale() {
+    try {
+      var saved = localStorage.getItem(LOCALE_KEY);
+      if (saved === 'zh' || saved === 'en') return saved;
+    } catch (e) {}
+    return (navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+  }
+
+  function systemTheme() {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function detectThemePref() {
+    try {
+      var saved = localStorage.getItem(THEME_KEY);
+      if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+    } catch (e) {}
+    return 'system';
+  }
+
+  function resolveTheme(pref) {
+    return pref === 'system' ? systemTheme() : (pref === 'dark' ? 'dark' : 'light');
+  }
+
+  function syncThemeButton() {
+    var btn = document.getElementById('btn-theme');
+    if (!btn) return;
+    var labelKey = currentThemePref === 'dark'
+      ? 'themeDark'
+      : (currentThemePref === 'light' ? 'themeLight' : 'themeSystem');
+    var label = t('toggleTheme') + ' · ' + t(labelKey);
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('title', label);
+  }
+
+  function applyTheme(pref) {
+    currentThemePref = (pref === 'light' || pref === 'dark' || pref === 'system') ? pref : 'system';
+    currentTheme = resolveTheme(currentThemePref);
+    document.documentElement.setAttribute('data-theme-pref', currentThemePref);
+    document.documentElement.setAttribute('data-theme', currentTheme);
+    try { localStorage.setItem(THEME_KEY, currentThemePref); } catch (e) {}
+    syncThemeButton();
+  }
+
+  function applyLocale(locale) {
+    currentLocale = locale === 'en' ? 'en' : 'zh';
+    document.documentElement.setAttribute('data-locale', currentLocale);
+    document.documentElement.setAttribute('lang', currentLocale === 'zh' ? 'zh-CN' : 'en');
+    try { localStorage.setItem(LOCALE_KEY, currentLocale); } catch (e) {}
+
+    document.querySelectorAll('[data-i18n]').forEach(function (el) {
+      el.textContent = t(el.getAttribute('data-i18n'));
+    });
+    document.querySelectorAll('[data-i18n-html]').forEach(function (el) {
+      el.innerHTML = t(el.getAttribute('data-i18n-html'));
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(function (el) {
+      el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder')));
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach(function (el) {
+      el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
+    });
+    document.querySelectorAll('[data-i18n-aria]').forEach(function (el) {
+      el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria')));
+    });
+
+    var langCode = document.getElementById('lang-code');
+    if (langCode) langCode.textContent = currentLocale === 'zh' ? 'EN' : '中文';
+
+    var parentVal = document.getElementById('parent-select');
+    if (parentVal && !parentVal.value) {
+      var label = document.getElementById('cascader-label');
+      if (label) {
+        label.textContent = t('selectPage');
+        label.classList.add('cascader-placeholder');
+      }
+    }
+    updateRootsHint();
+    syncThemeButton();
+  }
+
+  function toggleTheme() {
+    var next = currentThemePref === 'system'
+      ? 'light'
+      : (currentThemePref === 'light' ? 'dark' : 'system');
+    applyTheme(next);
+  }
+
+  function bindSystemThemeListener() {
+    systemThemeMql = window.matchMedia('(prefers-color-scheme: dark)');
+    var onChange = function () {
+      if (currentThemePref === 'system') applyTheme('system');
+    };
+    if (systemThemeMql.addEventListener) systemThemeMql.addEventListener('change', onChange);
+    else if (systemThemeMql.addListener) systemThemeMql.addListener(onChange);
+  }
+
+  function toggleLocale() {
+    applyLocale(currentLocale === 'zh' ? 'en' : 'zh');
+  }
+
   let settingsCache = null;
   var applyingSettings = false;
   var settingsSaveTimer = null;
@@ -24,7 +287,7 @@
       body: opts.body ? (typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)) : undefined,
     });
     var data = await res.json();
-    if (!res.ok) throw new Error(data.error || '请求失败');
+    if (!res.ok) throw new Error(data.error || t('requestFailed'));
     return data;
   }
 
@@ -44,7 +307,7 @@
 
   // --- Loading overlay ---
   function setLoading(show, text, progress) {
-    text = text || '正在处理...';
+    text = text || t('processing');
     progress = progress || 0;
     var overlay = document.getElementById('loading-overlay');
     var txt = document.getElementById('loading-text');
@@ -123,7 +386,7 @@
         setSelectedParent([], false);
       }
       if (!opts.silent) {
-        showStatus(statusId, 'success', '✅ 设置已自动保存');
+        showStatus(statusId, 'success', t('settingsSaved'));
       }
     } catch (e) {
       showStatus(statusId, 'error', '❌ ' + e.message);
@@ -150,10 +413,10 @@
 
   // --- Test Notion ---
   async function testNotion() {
-    showStatus('notion-test-status', '', '\u6b63\u5728\u6d4b\u8bd5...', true);
+    showStatus('notion-test-status', '', t('testing'), true);
     try {
       await api('/settings/test-notion', { method: 'POST', body: JSON.stringify(getSettingsFromForm()) });
-      showStatus('notion-test-status', 'success', '\u2705 Notion \u8fde\u63a5\u6b63\u5e38');
+      showStatus('notion-test-status', 'success', t('notionOk'));
     } catch (e) {
       showStatus('notion-test-status', 'error', '\u274c ' + e.message);
     }
@@ -161,10 +424,10 @@
 
   // --- Test AI ---
   async function testAI() {
-    showStatus('ai-test-status', '', '\u6b63\u5728\u6d4b\u8bd5...', true);
+    showStatus('ai-test-status', '', t('testing'), true);
     try {
       await api('/settings/test-ai', { method: 'POST', body: JSON.stringify(getSettingsFromForm()) });
-      showStatus('ai-test-status', 'success', '\u2705 AI \u8fde\u63a5\u6b63\u5e38');
+      showStatus('ai-test-status', 'success', t('aiOk'));
     } catch (e) {
       showStatus('ai-test-status', 'error', '\u274c ' + e.message);
     }
@@ -219,11 +482,11 @@
   function formatCacheAge(fetchedAt) {
     if (!fetchedAt) return '';
     var mins = Math.max(0, Math.floor((Date.now() - fetchedAt) / 60000));
-    if (mins < 1) return '刚刚更新';
-    if (mins < 60) return mins + ' 分钟前缓存';
+    if (mins < 1) return t('justNow');
+    if (mins < 60) return t('minsAgo', { n: mins });
     var hours = Math.floor(mins / 60);
-    if (hours < 24) return hours + ' 小时前缓存';
-    return Math.floor(hours / 24) + ' 天前缓存';
+    if (hours < 24) return t('hoursAgo', { n: hours });
+    return t('daysAgo', { n: Math.floor(hours / 24) });
   }
 
   function readRootsCache() {
@@ -288,10 +551,11 @@
 
   function updateRootsHint(extra) {
     var hint = document.getElementById('cascader-hint');
+    if (!hint) return;
     var age = formatCacheAge(rootsFetchedAt);
     var base = age
-      ? ('点击可选中；向右展开子页面 · ' + age)
-      : '点击页面可选中；有子页面时向右展开';
+      ? t('cascaderHintExpand', { age: age })
+      : t('cascaderHint');
     hint.textContent = extra || base;
   }
 
@@ -302,7 +566,7 @@
     var label = document.getElementById('cascader-label');
     var confirmBtn = document.getElementById('cascader-confirm');
     if (!id) {
-      label.textContent = '请选择 Notion 页面';
+      label.textContent = t('selectPage');
       label.classList.remove('has-value');
       confirmBtn.disabled = true;
       if (persist) writeLastParent([]);
@@ -368,11 +632,11 @@
     menus.innerHTML = '';
 
     if (cascadeLoading && !cascadeColumns.length) {
-      menus.innerHTML = '<div class="cascader-loading"><div class="spinner"></div><span>正在加载目录...</span></div>';
+      menus.innerHTML = '<div class="cascader-loading"><div class="spinner"></div><span>' + escapeHtml(t('loadingRoots')) + '</span></div>';
       return;
     }
     if (!cascadeColumns.length) {
-      menus.innerHTML = '<div class="cascader-empty">暂无可用页面，请确认已授权 Notion 集成</div>';
+      menus.innerHTML = '<div class="cascader-empty">' + escapeHtml(t('noPages')) + '</div>';
       return;
     }
 
@@ -381,13 +645,13 @@
       menu.className = 'cascader-menu';
 
       if (col.loading) {
-        menu.innerHTML = '<div class="cascader-loading"><div class="spinner"></div><span>加载子页面...</span></div>';
+        menu.innerHTML = '<div class="cascader-loading"><div class="spinner"></div><span>' + escapeHtml(t('loadingChildren')) + '</span></div>';
         menus.appendChild(menu);
         return;
       }
 
       if (!col.pages || !col.pages.length) {
-        menu.innerHTML = '<div class="cascader-empty">' + (colIndex === 0 ? '暂无页面' : '无子页面') + '</div>';
+        menu.innerHTML = '<div class="cascader-empty">' + escapeHtml(colIndex === 0 ? t('noPagesShort') : t('noChildren')) + '</div>';
         menus.appendChild(menu);
         return;
       }
@@ -446,7 +710,7 @@
     // Show next-column loading placeholder while fetching
     cascadeColumns.push({ parentId: page.id, pages: [], activeId: '', loadingId: null, loading: true });
     renderCascaderMenus();
-    updateRootsHint('正在加载「' + (page.title || 'Untitled') + '」的子页面…');
+    updateRootsHint(t('loadingChildrenOf', { title: page.title || 'Untitled' }));
 
     try {
       var children = await fetchNotionPages({ parentId: page.id });
@@ -458,13 +722,13 @@
         cascadeColumns.push({ parentId: page.id, pages: children, activeId: '', loadingId: null, loading: false });
         updateRootsHint();
       } else {
-        updateRootsHint('「' + (page.title || 'Untitled') + '」下暂无子页面，可直接确认选择');
+        updateRootsHint(t('noChildrenConfirm', { title: page.title || 'Untitled' }));
       }
       renderCascaderMenus();
     } catch (e) {
       cascadeColumns = cascadeColumns.slice(0, colIndex + 1);
       cascadeColumns[colIndex].loadingId = null;
-      updateRootsHint('子页面加载失败: ' + e.message);
+      updateRootsHint(t('childrenFail', { msg: e.message }));
       renderCascaderMenus();
     }
   }
@@ -494,7 +758,7 @@
 
       // Stale-while-revalidate: refresh in background after TTL
       if (!isRootsCacheFresh(cached)) {
-        updateRootsHint(formatCacheAge(cached.fetchedAt) + '（已过期，正在刷新…）');
+        updateRootsHint(t('cacheExpired', { age: formatCacheAge(cached.fetchedAt) }));
         try {
           var fresh = await loadRootsFromNetwork();
           if (cascadeMode === 'cascade') {
@@ -502,7 +766,7 @@
             applyRootsToColumns(fresh, keepActive || activeRootId);
           }
         } catch (e) {
-          updateRootsHint(formatCacheAge(cached.fetchedAt) + '（刷新失败，仍使用缓存）');
+          updateRootsHint(t('cacheRefreshFail', { age: formatCacheAge(cached.fetchedAt) }));
         }
       }
       return;
@@ -518,7 +782,7 @@
       cascadeBootstrapped = false;
       cascadeColumns = [];
       document.getElementById('cascader-menus').innerHTML =
-        '<div class="cascader-empty">加载失败: ' + escapeHtml(e.message) + '</div>';
+        '<div class="cascader-empty">' + escapeHtml(t('loadFail', { msg: e.message })) + '</div>';
     } finally {
       cascadeLoading = false;
     }
@@ -531,17 +795,17 @@
     cascadeLoading = true;
     cascadeColumns = [];
     document.getElementById('parent-search').value = '';
-    updateRootsHint('正在刷新一级目录…');
+    updateRootsHint(t('refreshingRoots'));
     renderCascaderMenus();
     var keepActive = selectedPath[0] && selectedPath[0].id;
     try {
       var roots = await loadRootsFromNetwork();
       applyRootsToColumns(roots, keepActive || '');
-      updateRootsHint('已刷新 · ' + formatCacheAge(rootsFetchedAt));
+      updateRootsHint(t('refreshed', { age: formatCacheAge(rootsFetchedAt) }));
     } catch (e) {
-      updateRootsHint('刷新失败: ' + e.message);
+      updateRootsHint(t('refreshFail', { msg: e.message }));
       document.getElementById('cascader-menus').innerHTML =
-        '<div class="cascader-empty">刷新失败: ' + escapeHtml(e.message) + '</div>';
+        '<div class="cascader-empty">' + escapeHtml(t('refreshFail', { msg: e.message })) + '</div>';
     } finally {
       cascadeLoading = false;
     }
@@ -563,18 +827,18 @@
     cascadeLoading = true;
     cascadeColumns = [];
     renderCascaderMenus();
-    document.getElementById('cascader-hint').textContent = '正在搜索…';
+    document.getElementById('cascader-hint').textContent = t('searching');
     try {
       var pages = await fetchNotionPages({ query: query });
       cascadeColumns = [{ parentId: null, pages: pages, activeId: '', loadingId: null, loading: false }];
       document.getElementById('cascader-hint').textContent = pages.length
-        ? '搜索模式：点击结果即可选中'
-        : '未找到匹配页面';
+        ? t('searchMode')
+        : t('searchEmpty');
       renderCascaderMenus();
     } catch (e) {
       document.getElementById('cascader-menus').innerHTML =
-        '<div class="cascader-empty">搜索失败: ' + escapeHtml(e.message) + '</div>';
-      document.getElementById('cascader-hint').textContent = '搜索失败';
+        '<div class="cascader-empty">' + escapeHtml(t('searchFailDetail', { msg: e.message })) + '</div>';
+      document.getElementById('cascader-hint').textContent = t('searchFail');
     } finally {
       cascadeLoading = false;
     }
@@ -626,6 +890,27 @@
     return (data && data.processedContent) || '';
   }
 
+  function escapeHtml(text) {
+    return String(text || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function renderPreviewContent(md) {
+    var html = escapeHtml(md || t('noContent'));
+    return html.replace(/!\[([^\]]*)\]\((https?:[^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)/g, function(_, alt, src) {
+      return '<img class="preview-media" src="' + src + '" alt="' + alt + '" loading="lazy">';
+    });
+  }
+
+  function showPreview(data, url) {
+    document.getElementById('preview-card').style.display = 'block';
+    document.getElementById('preview-title-tag').textContent = (data && data.title) || url;
+    document.getElementById('preview-content').innerHTML = renderPreviewContent(buildMarkdownContent(data));
+  }
+
   function triggerMarkdownDownload(data) {
     var md = buildMarkdownContent(data);
     var blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
@@ -644,38 +929,52 @@
     if (!lastPreview) return;
     try {
       await navigator.clipboard.writeText(buildMarkdownContent(lastPreview));
-      showStatus('extract-status', 'success', '✅ 已复制到剪贴板');
+      showStatus('extract-status', 'success', t('copied'));
     } catch (e) {
-      showStatus('extract-status', 'error', '❌ 复制失败：' + e.message);
+      showStatus('extract-status', 'error', t('copyFail', { msg: e.message }));
     }
   }
 
   function downloadMarkdown() {
     if (!lastPreview) return;
     var filename = triggerMarkdownDownload(lastPreview);
-    showStatus('extract-status', 'success', '✅ Markdown 文件已下载：' + filename);
+    showStatus('extract-status', 'success', t('mdDownloaded', { name: filename }));
+  }
+
+  function isTextOnlyMode() {
+    var el = document.getElementById('opt-text-only');
+    return !!(el && el.checked);
+  }
+
+  function extractPayload(extra) {
+    return Object.assign({
+      url: document.getElementById('extract-url').value.trim(),
+      promptOverride: document.getElementById('prompt-override').value.trim(),
+      settings: getSettingsFromForm(),
+      textOnly: isTextOnlyMode(),
+    }, extra || {});
   }
 
   async function doExportMarkdown() {
     var url = document.getElementById('extract-url').value.trim();
     if (!url) {
-      showStatus('extract-status', 'error', '请输入网页链接');
+      showStatus('extract-status', 'error', t('needUrl'));
       return;
     }
-    var promptOverride = document.getElementById('prompt-override').value.trim();
     hideStatus('extract-status');
-    setLoading(true, '正在提取并整理 Markdown...', 30);
+    setLoading(true, t('extractingMd'), 30);
     try {
-      var data = lastPreview && lastPreview.url === url ? lastPreview : await api('/extract/preview', {
+      var reuse = lastPreview
+        && lastPreview.url === url
+        && !!lastPreview.textOnly === isTextOnlyMode();
+      var data = reuse ? lastPreview : await api('/extract/preview', {
         method: 'POST',
-        body: JSON.stringify({ url: url, promptOverride: promptOverride, settings: getSettingsFromForm() }),
+        body: JSON.stringify(extractPayload()),
       });
       lastPreview = data;
-      document.getElementById('preview-card').style.display = 'block';
-      document.getElementById('preview-title-tag').textContent = data.title || url;
-      document.getElementById('preview-content').textContent = buildMarkdownContent(data) || '(无内容)';
+      showPreview(data, url);
       var filename = triggerMarkdownDownload(data);
-      showStatus('extract-status', 'success', '✅ Markdown 文件已下载：' + filename);
+      showStatus('extract-status', 'success', t('mdDownloaded', { name: filename }));
     } catch (e) {
       showStatus('extract-status', 'error', '❌ ' + e.message);
     } finally {
@@ -687,21 +986,19 @@
   async function doPreview() {
     var url = document.getElementById('extract-url').value.trim();
     if (!url) {
-      showStatus('extract-status', 'error', '\u8bf7\u8f93\u5165\u7f51\u9875\u94fe\u63a5');
+      showStatus('extract-status', 'error', t('needUrl'));
       return;
     }
     hideStatus('extract-status');
-    setLoading(true, '\u6b63\u5728\u63d0\u53d6\u5e76\u5206\u6790\u7f51\u9875\u5185\u5bb9...', 30);
+    setLoading(true, t('extracting'), 30);
     try {
       var data = await api('/extract/preview', {
         method: 'POST',
-        body: JSON.stringify({ url: url, settings: getSettingsFromForm() }),
+        body: JSON.stringify(extractPayload()),
       });
-      document.getElementById('preview-card').style.display = 'block';
-      document.getElementById('preview-title-tag').textContent = data.title || url;
-      document.getElementById('preview-content').textContent = buildMarkdownContent(data) || '(\u65e0\u5185\u5bb9)';
+      showPreview(data, url);
       lastPreview = data;
-      showStatus('extract-status', 'success', '\u2705 \u9884\u89c8\u5b8c\u6210 \u2014 \u786e\u8ba4\u65e0\u8bef\u540e\u70b9\u51fb"\u63d0\u53d6\u5e76\u4fdd\u5b58"');
+      showStatus('extract-status', 'success', t('previewDone'));
     } catch (e) {
       showStatus('extract-status', 'error', '\u274c ' + e.message);
     } finally {
@@ -713,37 +1010,57 @@
   async function doExtract() {
     var url = document.getElementById('extract-url').value.trim();
     if (!url) {
-      showStatus('extract-status', 'error', '\u8bf7\u8f93\u5165\u7f51\u9875\u94fe\u63a5');
+      showStatus('extract-status', 'error', t('needUrl'));
       return;
     }
     var parentId = document.getElementById('parent-select').value.trim();
     if (!parentId) {
-      showStatus('extract-status', 'error', '\u8bf7\u9009\u62e9\u4e00\u4e2a Notion \u76ee\u6807\u9875\u9762\uff08\u9700\u5728 Notion \u4e2d\u5c06\u9875\u9762\u6388\u6743\u7ed9\u96c6\u6210\uff09');
+      showStatus('extract-status', 'error', t('needParent'));
       return;
     }
     hideStatus('extract-status');
-    setLoading(true, '\u6b63\u5728\u63d0\u53d6\u5185\u5bb9...', 20);
+    setLoading(true, t('extractingContent'), 20);
     try {
       var result = await api('/extract', {
         method: 'POST',
-        body: JSON.stringify({
-          url: url,
-          parentId: parentId,
-          promptOverride: document.getElementById('prompt-override').value.trim(),
-          settings: getSettingsFromForm(),
-        }),
+        body: JSON.stringify(extractPayload({ parentId: parentId })),
       });
-      setLoading(true, '\u6b63\u5728\u4fdd\u5b58\u5230 Notion...', 60);
-      await (function(wait){ return function(resolve){ setTimeout(resolve, wait); }})(800);
-      showStatus('extract-status', 'success', '\u2705 \u5df2\u6210\u529f\u4fdd\u5b58\u5230 Notion\uff01\u6807\u9898: ' + (result.title || url));
+      setLoading(true, t('savingNotion'), 60);
+      await new Promise(function (resolve) { setTimeout(resolve, 400); });
+      var pageUrl = result.notionResult && result.notionResult.pageUrl;
+      var msg = t('saveSuccess', { title: escapeHtml(result.title || url) });
+      if (pageUrl) {
+        msg += ' <a class="status-link" href="' + escapeHtml(pageUrl) + '" target="_blank" rel="noreferrer">' +
+          escapeHtml(t('openInNotion')) + '</a>';
+      }
+      showStatus('extract-status', 'success', msg);
       setLoading(false);
     } catch (e) {
-      showStatus('extract-status', 'error', '\u274c ' + e.message);
+      showStatus('extract-status', 'error', '❌ ' + e.message);
       setLoading(false);
     }
   }
 
   // --- Init ---
+  applyTheme(detectThemePref());
+  applyLocale(detectLocale());
+  bindSystemThemeListener();
+  document.getElementById('btn-theme').addEventListener('click', toggleTheme);
+  document.getElementById('btn-lang').addEventListener('click', toggleLocale);
+
+  (function bindTextOnlyOption() {
+    var key = 'savetonotion-text-only';
+    var el = document.getElementById('opt-text-only');
+    if (!el) return;
+    try {
+      el.checked = localStorage.getItem(key) === '1';
+    } catch (e) {}
+    el.addEventListener('change', function () {
+      try { localStorage.setItem(key, el.checked ? '1' : '0'); } catch (e) {}
+      lastPreview = null;
+    });
+  })();
+
   loadSettings();
   bindSettingsAutoSave();
   bindCascaderUi();
