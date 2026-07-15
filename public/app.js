@@ -899,10 +899,24 @@
   }
 
   function renderPreviewContent(md) {
-    var html = escapeHtml(md || t('noContent'));
-    return html.replace(/!\[([^\]]*)\]\((https?:[^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)/g, function(_, alt, src) {
-      return '<img class="preview-media" src="' + src + '" alt="' + alt + '" loading="lazy">';
+    var src = md || t('noContent');
+    var html = escapeHtml(src);
+    // Images
+    html = html.replace(/!\[([^\]]*)\]\((https?:[^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)/g, function(_, alt, url) {
+      return '<img class="preview-media" src="' + url + '" alt="' + alt + '" loading="lazy">';
     });
+    // Links [text](url)
+    html = html.replace(/\[([^\]]+)\]\((https?:[^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)/g, function(_, label, url) {
+      return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
+    });
+    // Inline code, bold, italic (order: code → bold → italic)
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    // Paragraph breaks
+    html = html.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
+    return '<p>' + html + '</p>';
   }
 
   function showPreview(data, url) {

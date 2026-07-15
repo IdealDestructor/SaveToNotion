@@ -347,15 +347,98 @@ function chunkText(text, max) {
   return out.length ? out : [''];
 }
 
-function richText(text, max) {
+function makeRichTextItem(content, opts) {
+  opts = opts || {};
+  const item = {
+    type: 'text',
+    text: { content: content == null ? '' : String(content) },
+    annotations: {
+      bold: !!opts.bold,
+      italic: !!opts.italic,
+      strikethrough: !!opts.strikethrough,
+      underline: false,
+      code: !!opts.code,
+      color: 'default',
+    },
+  };
+  if (opts.url && isHttpUrl(opts.url)) {
+    item.text.link = { url: opts.url };
+  }
+  return item;
+}
+
+function appendRichTextChunks(out, content, opts, max) {
+  if (content == null || content === '') return;
+  for (const chunk of chunkText(String(content), max)) {
+    out.push(makeRichTextItem(chunk, opts));
+  }
+}
+
+// Inline markdown → Notion rich_text (links, bold, italic, code, strike, images-as-links).
+const INLINE_MD_RE = /(!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\))|(\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\))|(`([^`]+)`)|(\*\*([^*]+)\*\*)|(__([^_]+)__)|(\*([^*]+)\*)|(_([^_]+)_)|(~~([^~]+)~~)|(https?:\/\/[^\s<]+[^\s<.,;:!?'")\]])/g;
+
+function parseInlineToRichText(text, max) {
   max = max || 1900;
-  return chunkText(text, max).map(t => ({ type: 'text', text: { content: t } }));
+  const src = text == null ? '' : String(text);
+  if (!src) return [makeRichTextItem('')];
+
+  const out = [];
+  let last = 0;
+  INLINE_MD_RE.lastIndex = 0;
+  let match;
+  while ((match = INLINE_MD_RE.exec(src)) !== null) {
+    if (match.index > last) {
+      appendRichTextChunks(out, src.slice(last, match.index), null, max);
+    }
+
+    if (match[1] != null) {
+      // ![alt](url) — Notion rich_text cannot embed images; use a hyperlink fallback.
+      const alt = match[2] || match[3];
+      const url = match[3];
+      if (isHttpUrl(url)) appendRichTextChunks(out, alt || url, { url }, max);
+      else appendRichTextChunks(out, match[0], null, max);
+    } else if (match[4] != null) {
+      const label = match[5];
+      const url = match[6];
+      if (isHttpUrl(url)) appendRichTextChunks(out, label, { url }, max);
+      else appendRichTextChunks(out, match[0], null, max);
+    } else if (match[7] != null) {
+      appendRichTextChunks(out, match[8], { code: true }, max);
+    } else if (match[9] != null) {
+      appendRichTextChunks(out, match[10], { bold: true }, max);
+    } else if (match[11] != null) {
+      appendRichTextChunks(out, match[12], { bold: true }, max);
+    } else if (match[13] != null) {
+      appendRichTextChunks(out, match[14], { italic: true }, max);
+    } else if (match[15] != null) {
+      appendRichTextChunks(out, match[16], { italic: true }, max);
+    } else if (match[17] != null) {
+      appendRichTextChunks(out, match[18], { strikethrough: true }, max);
+    } else if (match[19] != null) {
+      const url = match[19];
+      if (isHttpUrl(url)) appendRichTextChunks(out, url, { url }, max);
+      else appendRichTextChunks(out, url, null, max);
+    }
+
+    last = match.index + match[0].length;
+  }
+  if (last < src.length) appendRichTextChunks(out, src.slice(last), null, max);
+  return out.length ? out : [makeRichTextItem('')];
+}
+
+function richText(text, max, options) {
+  max = max || 1900;
+  options = options || {};
+  if (options.plain) {
+    return chunkText(text == null ? '' : String(text), max).map(t => makeRichTextItem(t));
+  }
+  return parseInlineToRichText(text, max);
 }
 
 function mediaBlock(url, caption, forcedType) {
   if (!isHttpUrl(url)) return null;
   const captionText = caption && caption !== 'video' ? caption : '';
-  const captionRt = captionText ? richText(captionText) : [];
+  const captionRt = captionText ? richText(captionText, 1900, { plain: true }) : [];
 
   let type = forcedType;
   if (!type) {
@@ -424,7 +507,7 @@ function pushTextBlocks(blocks, text) {
       flushText();
       const block = mediaBlock(part.url, part.alt);
       if (block) blocks.push(block);
-      else textBuf.push(`![${part.alt}](${part.url})`);
+      else textBuf.push(`[${part.alt || part.url}](${part.url})`);
     } else {
       textBuf.push(part.value);
     }
@@ -432,9 +515,31 @@ function pushTextBlocks(blocks, text) {
   flushText();
 }
 
+/** Push a typed text block, pulling out any inline media as sibling image/video blocks. */
+function pushTypedBlock(blocks, type, text) {
+  const trimmed = text == null ? '' : String(text);
+  const parts = splitInlineMedia(trimmed);
+  const textValue = parts.filter(p => p.kind === 'text').map(p => p.value).join('').trim();
+  const mediaParts = parts.filter(p => p.kind === 'media');
+
+  if (textValue || mediaParts.length === 0) {
+    blocks.push({
+      object: 'block',
+      type,
+      [type]: { rich_text: richText(textValue || trimmed.trim()) },
+    });
+  }
+
+  for (const part of mediaParts) {
+    const block = mediaBlock(part.url, part.alt);
+    if (block) blocks.push(block);
+    else pushTextBlocks(blocks, `[${part.alt || part.url}](${part.url})`);
+  }
+}
+
 function parseMarkdownToBlocks(markdown) {
   const blocks = [];
-  const lines = markdown.split('\n');
+  const lines = String(markdown || '').split('\n');
   let currentParagraph = [];
   let inCode = false;
   let codeLang = 'text';
@@ -451,7 +556,7 @@ function parseMarkdownToBlocks(markdown) {
     const content = codeBuf.join('\n');
     blocks.push({
       object: 'block', type: 'code',
-      code: { rich_text: richText(content || ''), language: normalizeCodeLang(codeLang) },
+      code: { rich_text: richText(content || '', 1900, { plain: true }), language: normalizeCodeLang(codeLang) },
     });
     codeBuf = [];
     inCode = false;
@@ -483,13 +588,13 @@ function parseMarkdownToBlocks(markdown) {
       continue;
     }
 
-    if (line.startsWith('#### ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_3', heading_3: { rich_text: richText(line.slice(5)) } }); }
-    else if (line.startsWith('### ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_3', heading_3: { rich_text: richText(line.slice(4)) } }); }
-    else if (line.startsWith('## ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_2', heading_2: { rich_text: richText(line.slice(3)) } }); }
-    else if (line.startsWith('# ')) { flushParagraph(); blocks.push({ object: 'block', type: 'heading_1', heading_1: { rich_text: richText(line.slice(2)) } }); }
-    else if (line.startsWith('> ')) { flushParagraph(); blocks.push({ object: 'block', type: 'quote', quote: { rich_text: richText(line.slice(2)) } }); }
-    else if (line.startsWith('- ') || line.startsWith('* ')) { flushParagraph(); blocks.push({ object: 'block', type: 'bulleted_list_item', bulleted_list_item: { rich_text: richText(line.slice(2)) } }); }
-    else if (/^\d+\.\s/.test(line)) { flushParagraph(); blocks.push({ object: 'block', type: 'numbered_list_item', numbered_list_item: { rich_text: richText(line.replace(/^\d+\.\s/, '')) } }); }
+    if (line.startsWith('#### ')) { flushParagraph(); pushTypedBlock(blocks, 'heading_3', line.slice(5)); }
+    else if (line.startsWith('### ')) { flushParagraph(); pushTypedBlock(blocks, 'heading_3', line.slice(4)); }
+    else if (line.startsWith('## ')) { flushParagraph(); pushTypedBlock(blocks, 'heading_2', line.slice(3)); }
+    else if (line.startsWith('# ')) { flushParagraph(); pushTypedBlock(blocks, 'heading_1', line.slice(2)); }
+    else if (line.startsWith('> ')) { flushParagraph(); pushTypedBlock(blocks, 'quote', line.slice(2)); }
+    else if (line.startsWith('- ') || line.startsWith('* ')) { flushParagraph(); pushTypedBlock(blocks, 'bulleted_list_item', line.slice(2)); }
+    else if (/^\d+\.\s/.test(line)) { flushParagraph(); pushTypedBlock(blocks, 'numbered_list_item', line.replace(/^\d+\.\s/, '')); }
     else if (line.trim() === '') { flushParagraph(); }
     else { currentParagraph.push(line); }
   }
@@ -555,7 +660,7 @@ function normalizeNotionId(id) {
 }
 
 function titleProperty(text) {
-  return { title: richText(text || 'Untitled', 2000) };
+  return { title: richText(text || 'Untitled', 2000, { plain: true }) };
 }
 
 async function saveToNotion(processedContent, title, settings, parentId, note) {
@@ -647,4 +752,4 @@ async function preview(url, promptOverride, settings, options) {
   return { title: rawContent.title, url: rawContent.url, rawContent: rawContent.content, processedContent, textOnly: !!options.textOnly };
 }
 
-module.exports = { extractAndSave, preview };
+module.exports = { extractAndSave, preview, parseMarkdownToBlocks };
