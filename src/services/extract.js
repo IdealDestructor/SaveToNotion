@@ -107,9 +107,17 @@ function stripMediaMarkdown(markdown) {
     .trim();
 }
 
+function mediaPlaceholder(idx) {
+  return `⟦MEDIA:${idx}⟧`;
+}
+
+// Match common AI-mangled forms: ⟦MEDIA:0⟧, ⟦MEDIA_0⟧, [[MEDIA_N]], 【MEDIA_0】, etc.
+const MEDIA_PLACEHOLDER_RE =
+  /(?:⟦|\[\[|【)\s*MEDIA(?:\s*[_\s:-]\s*|\s+)(\d+|N)\s*(?:⟧|\]\]|】)/gi;
+
 function normalizeCtx(text) {
   return String(text || '')
-    .replace(/⟦MEDIA_\d+⟧/g, ' ')
+    .replace(MEDIA_PLACEHOLDER_RE, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -148,7 +156,7 @@ function protectMedia(markdown) {
       afterCtx: markdown.slice(match.index + match[0].length, match.index + match[0].length + 160),
     });
     parts.push(markdown.slice(last, match.index));
-    parts.push(`\n\n⟦MEDIA_${idx}⟧\n\n`);
+    parts.push(`\n\n${mediaPlaceholder(idx)}\n\n`);
     last = match.index + match[0].length;
   }
   parts.push(markdown.slice(last));
@@ -158,18 +166,43 @@ function protectMedia(markdown) {
   };
 }
 
+function resolveMediaIndex(token, media, used, autoIdx) {
+  if (token != null && /^\d+$/.test(token)) {
+    const i = Number(token);
+    if (media[i] && !used.has(i)) return { index: i, autoIdx };
+  }
+  // Literal "N" / unknown / duplicate index → assign next unused media in order
+  while (autoIdx < media.length && used.has(autoIdx)) autoIdx += 1;
+  if (autoIdx < media.length) return { index: autoIdx, autoIdx: autoIdx + 1 };
+  return { index: -1, autoIdx };
+}
+
 function restoreMedia(processed, media) {
   if (!media || !media.length) return (processed || '').trim();
   let out = processed || '';
   const used = new Set();
+  let autoIdx = 0;
 
-  out = out.replace(/⟦\s*MEDIA[_\s-]*(\d+)\s*⟧/gi, (_, n) => {
-    const i = Number(n);
-    if (media[i]) {
-      used.add(i);
-      return `\n\n${media[i].md}\n\n`;
+  // Whole-line placeholders (optionally wrapped as quote/list by the model)
+  out = out.replace(
+    /^[ \t]*(?:>[ \t]*)?(?:[-*][ \t]+|\d+\.[ \t]+)?(?:⟦|\[\[|【)\s*MEDIA(?:\s*[_\s:-]\s*|\s+)(\d+|N)\s*(?:⟧|\]\]|】)[ \t]*$/gim,
+    (_, token) => {
+      const resolved = resolveMediaIndex(token, media, used, autoIdx);
+      autoIdx = resolved.autoIdx;
+      if (resolved.index < 0) return '';
+      used.add(resolved.index);
+      return `\n\n${media[resolved.index].md}\n\n`;
     }
-    return '';
+  );
+
+  // Inline / remaining placeholders
+  MEDIA_PLACEHOLDER_RE.lastIndex = 0;
+  out = out.replace(MEDIA_PLACEHOLDER_RE, (_, token) => {
+    const resolved = resolveMediaIndex(token, media, used, autoIdx);
+    autoIdx = resolved.autoIdx;
+    if (resolved.index < 0) return '';
+    used.add(resolved.index);
+    return `\n\n${media[resolved.index].md}\n\n`;
   });
 
   for (let i = 0; i < media.length; i++) {
@@ -197,6 +230,9 @@ function restoreMedia(processed, media) {
     used.add(i);
   }
 
+  // Drop any leftover placeholder tokens the model invented
+  out = out.replace(MEDIA_PLACEHOLDER_RE, '');
+  out = out.replace(/^[ \t]*>[ \t]*$/gm, '');
   return out.replace(/\n{3,}/g, '\n\n').trim();
 }
 
@@ -270,7 +306,7 @@ async function processWithAI(rawContent, settings, promptOverride, options) {
 
   const mediaRule = textOnly
     ? '6. 纯文本模式：不要输出任何图片、视频、PDF 或媒体链接'
-    : `6. 正文中的 ⟦MEDIA_N⟧ 是媒体占位符，必须原样保留在对应位置（可随段落一起调整，但禁止删除、合并、改写编号或改成图片链接）。不要自行发明媒体 URL`;
+    : `6. 正文中形如 ⟦MEDIA:0⟧、⟦MEDIA:1⟧ 的标记是媒体占位符（冒号后为从 0 递增的数字）。必须完整原样保留每个占位符及编号；禁止改写为 MEDIA_N、禁止加 > 引用前缀、禁止删除/合并/改成图片链接。不要自行发明媒体 URL`;
   
   const defaultPrompt = `你是一个专业的内容整理助手。请将以下网页内容整理成结构清晰、格式优美的 Notion 笔记。
 
@@ -752,4 +788,4 @@ async function preview(url, promptOverride, settings, options) {
   return { title: rawContent.title, url: rawContent.url, rawContent: rawContent.content, processedContent, textOnly: !!options.textOnly };
 }
 
-module.exports = { extractAndSave, preview, parseMarkdownToBlocks };
+module.exports = { extractAndSave, preview, parseMarkdownToBlocks, protectMedia, restoreMedia };

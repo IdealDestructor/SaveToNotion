@@ -35,6 +35,9 @@
     --orb-1: #818cf8;
     --orb-2: #c084fc;
     --marquee: #6366f1, #a855f7, #22d3ee, #a855f7, #6366f1;
+    --scrollbar: rgba(99, 102, 241, .28);
+    --scrollbar-hover: rgba(99, 102, 241, .48);
+    --scrollbar-track: transparent;
     --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
@@ -63,6 +66,9 @@
     --orb-1: #4338ca;
     --orb-2: #7e22ce;
     --marquee: #818cf8, #c084fc, #22d3ee, #c084fc, #818cf8;
+    --scrollbar: rgba(165, 180, 252, .28);
+    --scrollbar-hover: rgba(165, 180, 252, .5);
+    --scrollbar-track: transparent;
 }
 
 @property --marquee-angle {
@@ -88,6 +94,39 @@ body {
     flex-direction: column;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar) var(--scrollbar-track);
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+    background: var(--scrollbar);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-hover);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 /* Ambient background */
